@@ -1,0 +1,4779 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "past.dev Memory API",
+    "version": "1.0.0",
+    "summary": "Ingest timestamped text and retrieve ranked, source-backed memory.",
+    "description": "The memory endpoints of the past.dev API, copied from https://past.dev/openapi.json. This is an unofficial guide; the source of truth is past.dev/docs.",
+    "contact": {
+      "name": "past.dev",
+      "url": "https://past.dev/call",
+      "email": "support@past.dev"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://api.past.dev",
+      "description": "Production"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "tags": [
+    {
+      "name": "ingestion",
+      "description": "Accept, observe, and forget source data."
+    },
+    {
+      "name": "recall",
+      "description": "Retrieve ranked memory documents."
+    },
+    {
+      "name": "identities",
+      "description": "Manage customer-owned identities and traits."
+    },
+    {
+      "name": "audiences",
+      "description": "Create and manage the audiences that scope data points."
+    },
+    {
+      "name": "management",
+      "description": "Projects and project keys, with the management key."
+    },
+    {
+      "name": "debugging",
+      "description": "Read what the platform did with what you sent, and what it costs."
+    },
+    {
+      "name": "webhooks",
+      "description": "Receive events from another system on a URL the console issues."
+    }
+  ],
+  "paths": {
+    "/api/v1/ingest": {
+      "post": {
+        "operationId": "ingest",
+        "tags": [
+          "ingestion"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:write"
+            ]
+          }
+        ],
+        "summary": "Accept one data point",
+        "description": "Accept one timestamped source. Returns 202 when processing is queued or 200 when the source is unchanged.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Nothing to process: content, label, metadata and timestamp all match what is stored for the id, or only the audience moved. Nothing is charged, and the receipt carries status completed and unchanged true.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The source was accepted and processing was queued.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "out-of-credits: the organization's credits are spent. `data` carries `creditsLeft`, `creditsNeeded` and `resetsOn`. Do not retry: buy credits, or wait for `resetsOn`.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The idempotency key was already used with another payload.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "content-too-large: the content exceeds 16 MiB of UTF-8.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The project's monthly cap (project-cap-reached) or the account's spend cap for the billing period (spend-cap-reached) is reached, or the plan's requests per minute are exceeded. The per-minute refusal carries no body.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The organization is not ready or background ingestion is disabled.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/batch": {
+      "post": {
+        "operationId": "ingestBatch",
+        "tags": [
+          "ingestion"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:write"
+            ]
+          }
+        ],
+        "summary": "Accept an ordered batch",
+        "description": "Accept one atomic ordered batch containing 1 to 1,000 data points and at most 16 MiB of UTF-8 content.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/IngestBatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Every source in the batch is unchanged.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestBatchResult"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "The batch was accepted and processing was queued.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestBatchResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "out-of-credits: the organization's credits are spent. `data` carries `creditsLeft`, `creditsNeeded` and `resetsOn`. Do not retry: buy credits, or wait for `resetsOn`.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The idempotency key was already used with another payload.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "content-too-large: the batch exceeds 16 MiB of UTF-8 content.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The project's monthly cap (project-cap-reached) or the account's spend cap for the billing period (spend-cap-reached) is reached, or the plan's requests per minute are exceeded. The per-minute refusal carries no body.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "The organization is not ready or background ingestion is disabled.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/ingest/{ingestionId}": {
+      "get": {
+        "operationId": "getIngestion",
+        "tags": [
+          "ingestion"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:read"
+            ]
+          }
+        ],
+        "summary": "Read ingestion settlement",
+        "description": "Return this send's status (processing, completed or failed) and project-wide readiness counts. Poll until status is completed before relying on recall for the update; settled describes the whole project.",
+        "parameters": [
+          {
+            "name": "ingestionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The ingestion id returned by the single or batch ingest operation."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The current ingestion and readiness state.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IngestionStatus"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No matching ingestion exists in the selected project.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteIngestion",
+        "tags": [
+          "ingestion"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:write"
+            ]
+          }
+        ],
+        "summary": "Forget an ingestion",
+        "description": "Delete every source accepted in the ingestion and erase memory that depends on those sources. Returns no body.",
+        "parameters": [
+          {
+            "name": "ingestionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The ingestion id returned by the single or batch ingest operation."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The ingestion sources were deleted. No response body.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No matching ingestion exists in the selected project.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/recall": {
+      "post": {
+        "operationId": "recall",
+        "tags": [
+          "recall"
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:read"
+            ]
+          }
+        ],
+        "summary": "Retrieve ranked memory documents",
+        "description": "Return one authoritative JSON result per selected document, with artifact context and document-local source evidence. Consumers own prompt, model, and display rendering.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RecallRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ranked document results with source excerpts and the UTC recall perspective.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RecallResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "402": {
+            "description": "out-of-credits: the recall costs 1 credit and the balance cannot pay for it. Every recall costs 1 credit on Pay as you go; on Flex and Enterprise a recall costs nothing within fair use and 1 credit above it, and only above it is it refused for credits. `data` carries `creditsLeft`, `creditsNeeded` and `resetsOn`. Do not retry: buy credits, or wait for `resetsOn`.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "The plan's requests per minute are exceeded, which carries no body, or `spend-cap-reached` where the recall is priced and the billing period's spend cap is reached. No plan caps the number of recall calls.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identities": {
+      "get": {
+        "operationId": "listIdentities",
+        "tags": [
+          "identities"
+        ],
+        "summary": "List identities",
+        "description": "List identities newest first with cursor pagination and optional filtering by trait key and value.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "managementKeyAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:read"
+            ]
+          }
+        ],
+        "parameters": [
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project slug. Required with a management key. A project key names its project by itself, and a different slug returns 400 project-mismatch."
+          },
+          {
+            "name": "after",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Opaque cursor from the previous page."
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 1000,
+              "default": 100
+            },
+            "description": "Page size. A value outside the range is clamped."
+          },
+          {
+            "name": "traitKey",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "Require this trait key to exist."
+          },
+          {
+            "name": "traitValue",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "When traitKey is present, require this exact value."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page of identities.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/IdentityList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/identities/{identity}": {
+      "put": {
+        "operationId": "upsertIdentity",
+        "tags": [
+          "identities"
+        ],
+        "summary": "Replace an identity",
+        "description": "Create an identity or replace its complete set of customer-authored string traits.",
+        "parameters": [
+          {
+            "name": "identity",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "The customer-owned identity id within the project selected by the bearer key, percent-encoded."
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project slug. Required with a management key. A project key names its project by itself, and a different slug returns 400 project-mismatch."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "managementKeyAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:write"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpsertIdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The created or updated identity.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patchIdentity",
+        "tags": [
+          "identities"
+        ],
+        "summary": "Merge identity traits",
+        "description": "Merge supplied traits into one identity. Explicit null removes a trait and missing keys remain unchanged.",
+        "parameters": [
+          {
+            "name": "identity",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "The customer-owned identity id within the project selected by the bearer key, percent-encoded."
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project slug. Required with a management key. A project key names its project by itself, and a different slug returns 400 project-mismatch."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "managementKeyAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:write"
+            ]
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PatchIdentityRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The updated identity.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "getIdentity",
+        "tags": [
+          "identities"
+        ],
+        "summary": "Read one identity",
+        "description": "Return one identity with traits, origin, timestamps, and the audience slugs it currently reaches.",
+        "parameters": [
+          {
+            "name": "identity",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "The customer-owned identity id within the project selected by the bearer key, percent-encoded."
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project slug. Required with a management key. A project key names its project by itself, and a different slug returns 400 project-mismatch."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "managementKeyAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested identity.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Identity"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No matching identity exists in the selected project.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteIdentity",
+        "tags": [
+          "identities"
+        ],
+        "summary": "Delete one identity",
+        "description": "Delete the directory record and remove it from audiences. Stored memory is retained. Returns no body.",
+        "parameters": [
+          {
+            "name": "identity",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "The customer-owned identity id within the project selected by the bearer key, percent-encoded."
+          },
+          {
+            "name": "project",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "description": "Project slug. Required with a management key. A project key names its project by itself, and a different slug returns 400 project-mismatch."
+          }
+        ],
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "managementKeyAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:write"
+            ]
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The identity was deleted. No response body.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No matching identity exists in the selected project.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audiences": {
+      "get": {
+        "operationId": "listAudiences",
+        "tags": [
+          "audiences"
+        ],
+        "summary": "List audiences",
+        "description": "List the project's audiences: the default project audience first, then the named audiences by creation time.",
+        "responses": {
+          "200": {
+            "description": "The project's audiences.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AudienceList"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audiences/{slug}": {
+      "get": {
+        "operationId": "getAudience",
+        "tags": [
+          "audiences"
+        ],
+        "summary": "Read one audience",
+        "description": "Return one audience by slug, with its member count, memory count and definition. The slug project returns the default audience.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 40
+            },
+            "description": "The slug: 2 to 40 lowercase letters, digits and dashes, with a letter or digit at each end."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The requested audience.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audience"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No audience carries this slug in the selected project.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "operationId": "putAudience",
+        "tags": [
+          "audiences"
+        ],
+        "summary": "Create or replace an audience",
+        "description": "Create an audience by slug, or replace its definition. A fixed audience lists identity ids; a rule audience matches identities by their traits.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 40
+            },
+            "description": "The slug: 2 to 40 lowercase letters, digits and dashes, with a letter or digit at each end."
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PutAudienceRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The audience was replaced.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audience"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "The audience was created.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audience"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Two creates raced on the same slug. Send the request again.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "deleteAudience",
+        "tags": [
+          "audiences"
+        ],
+        "summary": "Delete an audience",
+        "description": "Delete one audience by slug. The memory scoped to it stays and reaches nobody, and the slug is free again. Returns no body.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 40
+            },
+            "description": "The slug: 2 to 40 lowercase letters, digits and dashes, with a letter or digit at each end."
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "The audience was deleted. No response body.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No audience carries this slug in the selected project.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/audiences/{slug}/recompute": {
+      "post": {
+        "operationId": "recomputeAudience",
+        "tags": [
+          "audiences"
+        ],
+        "summary": "Recompute an audience",
+        "description": "Recompute the members of one audience from its definition and return the refreshed record.",
+        "parameters": [
+          {
+            "name": "slug",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "minLength": 2,
+              "maxLength": 40
+            },
+            "description": "The slug: 2 to 40 lowercase letters, digits and dashes, with a letter or digit at each end."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The refreshed audience.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Audience"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No audience carries this slug in the selected project.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/usage": {
+      "get": {
+        "operationId": "getUsage",
+        "tags": [
+          "debugging"
+        ],
+        "summary": "Read this month's credits",
+        "description": "The calendar month's credits in UTC. A project key reads the balance and its own project; the management key reads the balance and every live project.",
+        "security": [
+          {
+            "bearerAuth": []
+          },
+          {
+            "managementKeyAuth": []
+          },
+          {
+            "agentTokenAuth": [
+              "memory:read"
+            ]
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The month, the balance, and the project or projects.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSnapshot"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The request is malformed or violates a field constraint. Match behavior on the response code field.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "missing-api-key: no bearer. malformed-api-key: the header or the key has the wrong shape, or an agent token was sent to a route that accepts keys only. unauthorized: the key is unknown, expired, revoked, or of the kind this route refuses, or the agent token is invalid or expired.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "project-archived: the project of the key, or the project an agent token names, is archived. Unarchive it in the console to resume. insufficient-scope: the agent token does not carry the scope of the route.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Any other failure uses the same JSON error envelope.",
+            "headers": {
+              "X-Request-Id": {
+                "$ref": "#/components/headers/RequestId"
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Project API key beginning with past_sk_."
+      },
+      "managementKeyAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Management key beginning with past_mk_. One per organization, created from Settings in the console."
+      },
+      "agentTokenAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Agent access token for one person, issued by https://sso.past.dev after the person approves the agent. https://api.past.dev/auth.md gives the procedure. The operation names the scope it asks for: memory:read or memory:write. Send X-Past-Project with the project slug; without it, the only live project of the organization is used, and an organization with two or more returns 400 project-required. Managed service only."
+      }
+    },
+    "responses": {},
+    "headers": {
+      "RequestId": {
+        "description": "Server-generated id of this call, beginning with req_. Present on every /api/v1 response. The console's Requests screen lists the call under it.",
+        "schema": {
+          "type": "string"
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": [
+          "code",
+          "status"
+        ],
+        "properties": {
+          "code": {
+            "type": "string",
+            "description": "Stable kebab-case identifier."
+          },
+          "status": {
+            "type": "integer",
+            "description": "HTTP status repeated in the body."
+          },
+          "debugMessage": {
+            "type": "string"
+          },
+          "data": {}
+        }
+      },
+      "IngestItem": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Raw text. Empty or whitespace-only content is refused."
+          },
+          "label": {
+            "type": "string",
+            "description": "Optional short title for the data point, stored as its own field and returned as label on recall sources. Omitted on a re-send, the stored label stays."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable source id, with no '/' in it. When omitted, the lowercase SHA-256 of content is used."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the content occurred. Stored at microsecond precision."
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "array",
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Optional caller JSON stored with the source."
+          },
+          "audience": {
+            "type": "string",
+            "description": "Audience slug. Omit it or send project for project-visible memory."
+          },
+          "identity": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Customer id for the author. Its first ingest appearance creates the directory record."
+          }
+        }
+      },
+      "IngestRequest": {
+        "type": "object",
+        "required": [
+          "content"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "content": {
+            "type": "string",
+            "description": "Raw text. Empty or whitespace-only content is refused."
+          },
+          "label": {
+            "type": "string",
+            "description": "Optional short title for the data point, stored as its own field and returned as label on recall sources. Omitted on a re-send, the stored label stays."
+          },
+          "id": {
+            "type": "string",
+            "description": "Stable source id, with no '/' in it. When omitted, the lowercase SHA-256 of content is used."
+          },
+          "timestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the content occurred. Stored at microsecond precision."
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "array",
+              "string",
+              "number",
+              "boolean",
+              "null"
+            ],
+            "description": "Optional caller JSON stored with the source."
+          },
+          "audience": {
+            "type": "string",
+            "description": "Audience slug. Omit it or send project for project-visible memory."
+          },
+          "identity": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Customer id for the author. Its first ingest appearance creates the directory record."
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Replay key for this request."
+          }
+        }
+      },
+      "IngestBatchRequest": {
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/IngestItem"
+            }
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "maxLength": 200,
+            "description": "Replay key for the complete batch."
+          }
+        }
+      },
+      "IngestResult": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "ingestionId",
+          "sourceId",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "projectId": {
+            "type": "integer"
+          },
+          "ingestionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "completed"
+            ]
+          },
+          "unchanged": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "WebhookReceipt": {
+        "type": "object",
+        "required": [
+          "eventId",
+          "requestId",
+          "verdict"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "eventId": {
+            "type": "string",
+            "description": "The id of the event, beginning with evt_, assigned at receipt."
+          },
+          "requestId": {
+            "type": "string",
+            "description": "The id of this call, as in the X-Request-Id header."
+          },
+          "verdict": {
+            "type": "string",
+            "enum": [
+              "ingested",
+              "dropped"
+            ]
+          },
+          "droppedBy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "On a dropped event: the first filter that did not match, or the missing content. Null on an ingested event."
+          },
+          "ingestionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The ingestion id of an ingested event, read with the ingestion status operation. Null on a dropped event."
+          },
+          "dataPointId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The source id of the data point: the mapped id, or the event id when the webhook maps none. Null on a dropped event."
+          },
+          "unchanged": {
+            "type": [
+              "boolean",
+              "null"
+            ],
+            "description": "True when the event repeats a data point whose content and time are unchanged."
+          }
+        }
+      },
+      "IngestBatchItemResult": {
+        "type": "object",
+        "required": [
+          "ordinal",
+          "sourceId",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ordinal": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "completed"
+            ]
+          },
+          "unchanged": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "IngestBatchResult": {
+        "type": "object",
+        "required": [
+          "projectId",
+          "ingestionId",
+          "status",
+          "items"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "projectId": {
+            "type": "integer"
+          },
+          "ingestionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "completed"
+            ]
+          },
+          "unchanged": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestBatchItemResult"
+            }
+          }
+        }
+      },
+      "IngestionStatus": {
+        "type": "object",
+        "required": [
+          "status",
+          "settled",
+          "blocked",
+          "readiness"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "status": {
+            "type": "string",
+            "enum": [
+              "processing",
+              "completed",
+              "failed"
+            ],
+            "description": "This send. Poll until completed. failed means the send stopped on an error: failure names the reason, and POST /api/v1/ingest/{ingestionId}/retry runs it again."
+          },
+          "settled": {
+            "type": "boolean"
+          },
+          "blocked": {
+            "type": "boolean"
+          },
+          "readiness": {
+            "$ref": "#/components/schemas/IngestionReadiness"
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IngestionFailure"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why a failed send stopped. Null for every other status."
+          }
+        }
+      },
+      "IngestionReadiness": {
+        "type": "object",
+        "required": [
+          "raw",
+          "comprehension",
+          "consolidation",
+          "failed"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "raw": {
+            "type": "integer"
+          },
+          "comprehension": {
+            "type": "integer"
+          },
+          "consolidation": {
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          }
+        }
+      },
+      "RecallRequest": {
+        "type": "object",
+        "required": [
+          "query",
+          "identity"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "query": {
+            "type": "string",
+            "description": "Natural-language query."
+          },
+          "limit": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 200,
+            "default": 100,
+            "description": "Maximum number of documents in the page."
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "extra-high"
+            ],
+            "default": "low",
+            "description": "The evidence budget in words: low 8,000 tokens, medium 16,000, high 24,000, extra-high 32,000. A level above the plan's ceiling is lowered to it: 8,000 on Pay as you go and Flex, 32,000 on Enterprise. Send level or maxTokens, never both."
+          },
+          "maxTokens": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "An explicit evidence budget in tokens, for a caller who needs a figure the levels do not offer. Estimated from document content and excerpt text only, excluding JSON structure and metadata; lowered to the plan's ceiling in the same way; whole documents are kept or omitted."
+          },
+          "queryTimestamp": {
+            "type": "string",
+            "format": "date-time",
+            "description": "The perspective of the read. Evidence at or before this instant is eligible. Defaults to now."
+          },
+          "occurredFrom": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inclusive start of the occurrence window."
+          },
+          "occurredTo": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Inclusive end of the occurrence window. A start after the end returns 400 recall-range-invalid."
+          },
+          "sort": {
+            "type": "string",
+            "enum": [
+              "relevance",
+              "chronological"
+            ],
+            "default": "relevance",
+            "description": "chronological orders the selected documents oldest first and keeps each relevance rank."
+          },
+          "identity": {
+            "type": "string",
+            "maxLength": 200
+          }
+        }
+      },
+      "RecallSource": {
+        "type": "object",
+        "description": "Evidence for this document grouped by canonical source id and date; not the artifact's complete provenance. Original source documents have no duplicated body in excerpts.",
+        "required": [
+          "sourceId",
+          "occurredAt",
+          "excerpts"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "sourceId": {
+            "type": "string"
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "metadata": {
+            "description": "Caller metadata, exactly as sent; omitted when none was sent. Untrusted descriptive context."
+          },
+          "label": {
+            "type": "string",
+            "description": "The caller's label for the source, as sent at ingest; omitted when none was sent."
+          },
+          "excerpts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Verbatim supporting quotations. Repeated quotations are preserved."
+          }
+        }
+      },
+      "RecallArtifact": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "occurredAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "description": "source is an original data point. Any other value is the kind of a derived memory: observation, claim, rule, membership, identity, mention or temporal-anchor. The list can grow; treat an unknown value as a memory. The Concepts page of the docs defines each kind."
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "supersededAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Present when a later statement readable by this viewer superseded the artifact."
+          }
+        }
+      },
+      "RecallResult": {
+        "type": "object",
+        "required": [
+          "id",
+          "rank",
+          "occurredAt",
+          "content",
+          "artifact",
+          "sources"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "rank": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "content": {
+            "type": "string"
+          },
+          "artifact": {
+            "$ref": "#/components/schemas/RecallArtifact"
+          },
+          "sources": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecallSource"
+            }
+          }
+        }
+      },
+      "RecallResponse": {
+        "type": "object",
+        "required": [
+          "asOf",
+          "usedEvidenceTokens",
+          "results"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "asOf": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "usedEvidenceTokens": {
+            "type": "integer",
+            "description": "Sum of per-document character-based estimates for content and excerpt text only; excludes JSON structure, IDs, dates and metadata. Not model-provider usage."
+          },
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RecallResult"
+            }
+          },
+          "pending": {
+            "$ref": "#/components/schemas/RecallPending"
+          }
+        }
+      },
+      "RecallPending": {
+        "type": "object",
+        "description": "Present only while ingestions of the project are still processing. Their memory is not in this recall yet.",
+        "required": [
+          "ingestions",
+          "dataPoints",
+          "since",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ingestions": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Ingestions accepted and not yet complete or failed."
+          },
+          "dataPoints": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "The data points those ingestions carry."
+          },
+          "since": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the oldest of them was accepted."
+          },
+          "message": {
+            "type": "string",
+            "description": "One sentence for a person or an agent. The wording can change; read the numbers."
+          }
+        }
+      },
+      "UpsertIdentityRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "traits": {
+            "type": "object",
+            "propertyNames": {
+              "maxLength": 200
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          }
+        }
+      },
+      "PatchIdentityRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "traits": {
+            "type": "object",
+            "propertyNames": {
+              "maxLength": 200
+            },
+            "additionalProperties": {
+              "type": [
+                "string",
+                "null"
+              ],
+              "maxLength": 2000
+            }
+          }
+        }
+      },
+      "Identity": {
+        "type": "object",
+        "required": [
+          "identity",
+          "traits",
+          "origin",
+          "lastSeenAt",
+          "createdAt",
+          "updatedAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "traits": {
+            "type": "object",
+            "propertyNames": {
+              "maxLength": 200
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          },
+          "origin": {
+            "type": "string",
+            "enum": [
+              "api",
+              "ingest",
+              "csv",
+              "audience",
+              "connector",
+              "console",
+              "login",
+              "link"
+            ]
+          },
+          "lastSeenAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "audiences": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The audience slugs the identity reaches, on the single-record read; null elsewhere."
+          }
+        }
+      },
+      "IdentityList": {
+        "type": "object",
+        "required": [
+          "identities",
+          "hasMore",
+          "endCursor"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "identities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Identity"
+            }
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "endCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "BulkIdentityRow": {
+        "type": "object",
+        "required": [
+          "identity"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "traits": {
+            "type": "object",
+            "propertyNames": {
+              "maxLength": 200
+            },
+            "additionalProperties": {
+              "type": "string",
+              "maxLength": 2000
+            }
+          }
+        }
+      },
+      "BulkIdentityRequest": {
+        "type": "array",
+        "minItems": 1,
+        "maxItems": 1000,
+        "items": {
+          "$ref": "#/components/schemas/BulkIdentityRow"
+        }
+      },
+      "BulkIdentityResult": {
+        "type": "object",
+        "required": [
+          "identity",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "identity": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated"
+            ]
+          }
+        }
+      },
+      "BulkIdentityResponse": {
+        "type": "object",
+        "required": [
+          "identities"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "identities": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/BulkIdentityResult"
+            }
+          }
+        }
+      },
+      "DeleteDataPointsRequest": {
+        "type": "object",
+        "required": [
+          "ids"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 1000,
+            "items": {
+              "type": "string"
+            },
+            "description": "Caller-owned source ids. Repeated ids count once."
+          }
+        }
+      },
+      "DeletionReceipt": {
+        "type": "object",
+        "required": [
+          "operationId",
+          "ids"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "operationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The background deletion this request started."
+          },
+          "ids": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "The distinct ids covered, in the order named."
+          }
+        }
+      },
+      "AudienceCondition": {
+        "type": "object",
+        "required": [
+          "trait",
+          "operator"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "trait": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200
+          },
+          "operator": {
+            "type": "string",
+            "enum": [
+              "is",
+              "is_not",
+              "is_one_of",
+              "is_not_one_of",
+              "exists",
+              "does_not_exist"
+            ]
+          },
+          "values": {
+            "type": "array",
+            "maxItems": 50,
+            "items": {
+              "type": "string"
+            },
+            "description": "One value for is and is_not, 1 to 50 for is_one_of and is_not_one_of, none for exists and does_not_exist."
+          }
+        }
+      },
+      "AudienceRule": {
+        "type": "object",
+        "required": [
+          "match",
+          "conditions"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "match": {
+            "type": "string",
+            "enum": [
+              "all",
+              "any"
+            ]
+          },
+          "conditions": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 20,
+            "items": {
+              "$ref": "#/components/schemas/AudienceCondition"
+            }
+          }
+        }
+      },
+      "PutAudienceRequest": {
+        "type": "object",
+        "required": [
+          "kind"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "rule"
+            ]
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "description": "Defaults to the slug on create."
+          },
+          "identities": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 200
+            },
+            "description": "Required for a fixed audience. An empty list reaches nobody. An id with no record is created."
+          },
+          "rule": {
+            "$ref": "#/components/schemas/AudienceRule"
+          }
+        }
+      },
+      "Audience": {
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "kind",
+          "memberCount",
+          "memoryCount",
+          "reachesNobody",
+          "recomputedAt",
+          "createdAt",
+          "identities",
+          "rule"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "fixed",
+              "rule",
+              "default"
+            ]
+          },
+          "memberCount": {
+            "type": "integer",
+            "description": "The identities the audience reaches now."
+          },
+          "memoryCount": {
+            "type": "integer",
+            "description": "The memories scoped to this audience."
+          },
+          "reachesNobody": {
+            "type": "boolean",
+            "description": "True for a rule audience that matches no identity."
+          },
+          "recomputedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "identities": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "The ids of a fixed audience, sorted. Null for the other kinds."
+          },
+          "rule": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/AudienceRule"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The rule of a rule audience. Null for the other kinds."
+          }
+        }
+      },
+      "AudienceList": {
+        "type": "object",
+        "required": [
+          "audiences"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "audiences": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Audience"
+            }
+          }
+        }
+      },
+      "CreateProjectRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "maxLength": 255,
+            "description": "Display name with at least two letters or digits. The slug is derived from it."
+          }
+        }
+      },
+      "Project": {
+        "type": "object",
+        "required": [
+          "slug",
+          "name",
+          "description",
+          "isArchived",
+          "memoryCount",
+          "ingestionCap",
+          "monthIngestions",
+          "creditCap",
+          "monthCredits",
+          "createdAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "isArchived": {
+            "type": "boolean"
+          },
+          "memoryCount": {
+            "type": "integer"
+          },
+          "ingestionCap": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The project's monthly data-point cap. Null when the project carries none."
+          },
+          "monthIngestions": {
+            "type": "integer",
+            "description": "Data points accepted this calendar month."
+          },
+          "creditCap": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The project's monthly credit cap. Null when the project carries none."
+          },
+          "monthCredits": {
+            "type": "number",
+            "description": "Credits spent this calendar month."
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ProjectList": {
+        "type": "object",
+        "required": [
+          "projects"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Project"
+            }
+          }
+        }
+      },
+      "CreateKeyRequest": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 64
+          }
+        }
+      },
+      "CreatedKey": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "keyPrefix",
+          "keySuffix",
+          "createdAt",
+          "key"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "The key id, used to revoke it."
+          },
+          "name": {
+            "type": "string"
+          },
+          "keyPrefix": {
+            "type": "string"
+          },
+          "keySuffix": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "key": {
+            "type": "string",
+            "description": "The clear value. Returned in this response and nowhere else."
+          }
+        }
+      },
+      "IngestionFailure": {
+        "type": "object",
+        "required": [
+          "code",
+          "message"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "model-unavailable",
+              "model-response-unreadable",
+              "index-unavailable",
+              "content-rejected",
+              "internal"
+            ],
+            "description": "Why the send stopped. content-rejected is the one reason a retry does not fix."
+          },
+          "message": {
+            "type": "string",
+            "description": "The same reason in one sentence."
+          }
+        }
+      },
+      "RetryReceipt": {
+        "type": "object",
+        "required": [
+          "ingestionId",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ingestionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued"
+            ]
+          }
+        }
+      },
+      "IngestEstimateFile": {
+        "type": "object",
+        "required": [
+          "path",
+          "content"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string",
+            "description": "The path inside the import. Its extension helps detection."
+          },
+          "content": {
+            "type": "string",
+            "description": "The file as text. Extract PDF or office text yourself first."
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "email",
+              "chat",
+              "transcript",
+              "table",
+              "records",
+              "code",
+              "documentation",
+              "notes"
+            ],
+            "description": "Read the file as this kind instead of detecting it."
+          }
+        }
+      },
+      "IngestEstimateRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "type": "array",
+            "maxItems": 10000,
+            "items": {
+              "$ref": "#/components/schemas/IngestEstimateFile"
+            },
+            "description": "The files to cut. Send files or items, never both and never neither."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestItem"
+            },
+            "description": "Data points you cut yourself, batched and priced as given."
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "IANA zone reading the times a file writes without one. UTC when omitted."
+          },
+          "points": {
+            "type": "string",
+            "enum": [
+              "none",
+              "summary",
+              "full"
+            ],
+            "default": "summary",
+            "description": "How much of each point the answer lists."
+          }
+        }
+      },
+      "IngestEstimateFileResult": {
+        "type": "object",
+        "required": [
+          "path",
+          "kind",
+          "detectedBy",
+          "points",
+          "bytes",
+          "credits",
+          "skipped"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "path": {
+            "type": "string"
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The kind the file was read as. Null for a skipped file."
+          },
+          "detectedBy": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The rule that decided the kind, for example extension .md."
+          },
+          "points": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "credits": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "skipped": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "empty",
+              "unreadable",
+              "too-large",
+              "kind-mismatch",
+              null
+            ],
+            "description": "Why the file was left out, when it was."
+          }
+        }
+      },
+      "IngestEstimateBatch": {
+        "type": "object",
+        "required": [
+          "index",
+          "from",
+          "to",
+          "points",
+          "bytes",
+          "credits",
+          "idempotencyKey"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "index": {
+            "type": "integer"
+          },
+          "from": {
+            "type": "integer",
+            "description": "The first point's position in the cut."
+          },
+          "to": {
+            "type": "integer",
+            "description": "The last point's position in the cut."
+          },
+          "points": {
+            "type": "integer",
+            "description": "At most 500."
+          },
+          "bytes": {
+            "type": "integer",
+            "description": "At most 8 MiB of content."
+          },
+          "credits": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "idempotencyKey": {
+            "type": "string",
+            "description": "Send the batch with this key so a retry never doubles a point."
+          }
+        }
+      },
+      "IngestEstimatePoint": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "path",
+          "label",
+          "timestamp",
+          "identity",
+          "audience",
+          "bytes",
+          "credits",
+          "preview"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The stable source id the point will be sent under."
+          },
+          "kind": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "path": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The file the point came from."
+          },
+          "label": {
+            "type": "string"
+          },
+          "timestamp": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "identity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "audience": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "credits": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "preview": {
+            "type": "string",
+            "description": "The first 160 characters of the content."
+          },
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "With points full only: the content to send. Null otherwise."
+          },
+          "metadata": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "With points full only: the metadata the cut recorded. Null otherwise."
+          }
+        }
+      },
+      "IngestEstimateBalance": {
+        "type": "object",
+        "required": [
+          "left",
+          "resetsAt",
+          "projectCapLeft",
+          "ingestionCapReached"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "left": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "The credits the account may still draw. Null with no plan."
+          },
+          "resetsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Null where the credits never reset."
+          },
+          "projectCapLeft": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "This project's credit cap left. Null with no credit cap."
+          },
+          "ingestionCapReached": {
+            "type": "boolean"
+          }
+        }
+      },
+      "IngestEstimate": {
+        "type": "object",
+        "required": [
+          "files",
+          "dataPoints",
+          "bytes",
+          "credits",
+          "batches",
+          "points",
+          "pointsOmitted",
+          "balance",
+          "fits",
+          "fitsFirst",
+          "metered",
+          "timeZone"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "files": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestEstimateFileResult"
+            }
+          },
+          "dataPoints": {
+            "type": "integer"
+          },
+          "bytes": {
+            "type": "integer"
+          },
+          "credits": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Null when nothing is metered."
+          },
+          "batches": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestEstimateBatch"
+            }
+          },
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestEstimatePoint"
+            }
+          },
+          "pointsOmitted": {
+            "type": "integer",
+            "description": "The points past the listing cap."
+          },
+          "balance": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IngestEstimateBalance"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "fits": {
+            "type": "boolean",
+            "description": "Whether the whole import fits what is left to spend."
+          },
+          "fitsFirst": {
+            "type": "integer",
+            "description": "How many points, in time order, do fit."
+          },
+          "metered": {
+            "type": "boolean",
+            "description": "False on a deployment with no plan."
+          },
+          "timeZone": {
+            "type": "string"
+          }
+        }
+      },
+      "IngestionDiagnosisItem": {
+        "type": "object",
+        "required": [
+          "dataPointId",
+          "revision",
+          "status",
+          "searchable",
+          "memories",
+          "sourceId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "dataPointId": {
+            "type": "string"
+          },
+          "revision": {
+            "type": "integer"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "created",
+              "updated",
+              "unchanged"
+            ]
+          },
+          "searchable": {
+            "type": "boolean",
+            "description": "Whether the text you sent can be recalled yet."
+          },
+          "memories": {
+            "type": "integer",
+            "description": "The memories drawn from this revision that are current and searchable."
+          },
+          "sourceId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The id the lineage read takes as a root."
+          }
+        }
+      },
+      "IngestionDiagnosis": {
+        "type": "object",
+        "required": [
+          "next"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ingestionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "Null for a call refused before a send existed."
+          },
+          "requestId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "status": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The status the call answered, while the log holds it."
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "settledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "phase": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "queued",
+              "preparing",
+              "prepared",
+              "processing",
+              "captured",
+              "indexed",
+              "failed",
+              "nothing-changed",
+              null
+            ]
+          },
+          "failure": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/IngestionStop"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Present only when the phase is failed."
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/IngestionDiagnosisItem"
+            },
+            "description": "The first 100 data points the send carried."
+          },
+          "itemsOmitted": {
+            "type": "integer"
+          },
+          "credits": {
+            "type": "number"
+          },
+          "next": {
+            "type": "string",
+            "description": "One sentence naming the step to take."
+          }
+        }
+      },
+      "IngestionStop": {
+        "type": "object",
+        "required": [
+          "code",
+          "message",
+          "retryable"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "code": {
+            "type": "string",
+            "enum": [
+              "model-unavailable",
+              "model-response-unreadable",
+              "index-unavailable",
+              "content-rejected",
+              "internal"
+            ]
+          },
+          "message": {
+            "type": "string"
+          },
+          "retryable": {
+            "type": "boolean",
+            "description": "False only for content-rejected: the content has to change first."
+          }
+        }
+      },
+      "RequestKey": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "prefix": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The key's display prefix. Never anything of the secret."
+          }
+        }
+      },
+      "RequestRow": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "receivedAt",
+          "method",
+          "path",
+          "status",
+          "outcome",
+          "durationMs",
+          "credits"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "method": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer"
+          },
+          "errorCode": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "outcome": {
+            "type": "string",
+            "description": "What the call did, in the console's words."
+          },
+          "durationMs": {
+            "type": "integer"
+          },
+          "key": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/RequestKey"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "identity": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "ingestionId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "phase": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "queued",
+              "preparing",
+              "prepared",
+              "processing",
+              "captured",
+              "indexed",
+              "failed",
+              "nothing-changed",
+              null
+            ],
+            "description": "Where the send this call started got to."
+          },
+          "credits": {
+            "type": "number"
+          }
+        }
+      },
+      "RequestBodyHeader": {
+        "type": "object",
+        "required": [
+          "name",
+          "value"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "RequestBody": {
+        "type": "object",
+        "required": [
+          "headers",
+          "bytes"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "headers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestBodyHeader"
+            },
+            "description": "The allowlisted request headers. Never Authorization."
+          },
+          "contentType": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "request": {
+            "description": "The stored request body as JSON, or its text when it does not parse."
+          },
+          "response": {
+            "description": "The stored response body as JSON, or its text when it does not parse."
+          },
+          "bytes": {
+            "type": "integer"
+          }
+        }
+      },
+      "RequestDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/RequestRow"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "requestBytes": {
+                "type": "integer"
+              },
+              "billedBytes": {
+                "type": "integer"
+              },
+              "payloadExpired": {
+                "type": "boolean",
+                "description": "True once the plan's payload retention has passed."
+              },
+              "payload": {
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/RequestBody"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "RequestPage": {
+        "type": "object",
+        "required": [
+          "project",
+          "from",
+          "to",
+          "totalCount",
+          "hasMore",
+          "endCursor",
+          "requests"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "totalCount": {
+            "type": "integer"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "endCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "payloadRetentionDays": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The plan's payload retention window. Null where payloads are kept."
+          },
+          "requests": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestRow"
+            }
+          }
+        }
+      },
+      "RequestBucket": {
+        "type": "object",
+        "required": [
+          "accepted",
+          "failedLater",
+          "rejected"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "start": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "accepted": {
+            "type": "integer"
+          },
+          "failedLater": {
+            "type": "integer",
+            "description": "Calls the platform accepted and then stopped on."
+          },
+          "rejected": {
+            "type": "integer"
+          }
+        }
+      },
+      "RequestHistogram": {
+        "type": "object",
+        "required": [
+          "project",
+          "from",
+          "to",
+          "totals",
+          "buckets"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "project": {
+            "type": "string"
+          },
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "bucketMinutes": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "The interval the platform chose."
+          },
+          "totals": {
+            "$ref": "#/components/schemas/RequestBucket"
+          },
+          "buckets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RequestBucket"
+            }
+          }
+        }
+      },
+      "TraceNode": {
+        "type": "object",
+        "required": [
+          "id",
+          "kind",
+          "headline",
+          "occurredAt",
+          "createdAt",
+          "current",
+          "inputCount",
+          "outputCount"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "memory",
+              "source"
+            ]
+          },
+          "headline": {
+            "type": "string"
+          },
+          "memoryKind": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The kind of the memory, as artifact.kind on a recall result: observation, claim, rule, membership, identity, mention or temporal-anchor. Null for a source."
+          },
+          "dataPointId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "revision": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "occurredAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "readyAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When it became searchable."
+          },
+          "validFrom": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "validTo": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "current": {
+            "type": "boolean"
+          },
+          "replacedId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid"
+          },
+          "inputCount": {
+            "type": "integer"
+          },
+          "outputCount": {
+            "type": "integer"
+          },
+          "phase": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "queued",
+              "preparing",
+              "prepared",
+              "processing",
+              "captured",
+              "indexed",
+              "failed",
+              "nothing-changed",
+              null
+            ]
+          },
+          "requestId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "content": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A source's text, cut to 4,000 characters."
+          },
+          "contentTruncated": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      },
+      "TraceEdge": {
+        "type": "object",
+        "required": [
+          "inputId",
+          "derivedId"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "inputId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "derivedId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Built from inputId."
+          }
+        }
+      },
+      "TraceRootGroup": {
+        "type": "object",
+        "required": [
+          "entries",
+          "totalCount",
+          "hasMore",
+          "endCursor"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "entries": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraceNode"
+            }
+          },
+          "totalCount": {
+            "type": "integer"
+          },
+          "hasMore": {
+            "type": "boolean"
+          },
+          "endCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "TraceRoots": {
+        "type": "object",
+        "required": [
+          "memories",
+          "sources"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "memories": {
+            "$ref": "#/components/schemas/TraceRootGroup"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/TraceRootGroup"
+          }
+        }
+      },
+      "Lineage": {
+        "type": "object",
+        "required": [
+          "root",
+          "nodes",
+          "edges",
+          "hiddenCount"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "root": {
+            "$ref": "#/components/schemas/TraceNode"
+          },
+          "nodes": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraceNode"
+            }
+          },
+          "edges": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TraceEdge"
+            }
+          },
+          "hiddenCount": {
+            "type": "integer",
+            "description": "How many nodes the limit left out."
+          }
+        }
+      },
+      "TimelineRow": {
+        "type": "object",
+        "required": [
+          "node",
+          "section"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "node": {
+            "$ref": "#/components/schemas/TraceNode"
+          },
+          "section": {
+            "type": "string",
+            "enum": [
+              "revision",
+              "built-from",
+              "produced",
+              "elsewhere"
+            ],
+            "description": "The first section that claims the node."
+          }
+        }
+      },
+      "TimelineIngestion": {
+        "type": "object",
+        "required": [
+          "ingestionId",
+          "acceptedAt",
+          "phase"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ingestionId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestId": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "acceptedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "settledAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "preparing",
+              "prepared",
+              "processing",
+              "captured",
+              "indexed",
+              "failed",
+              "nothing-changed"
+            ]
+          }
+        }
+      },
+      "TimelineRecall": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "receivedAt",
+          "returned"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "requestId": {
+            "type": "string"
+          },
+          "receivedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "returned": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid"
+            },
+            "description": "The rows this recall returned."
+          }
+        }
+      },
+      "TimelineSupersession": {
+        "type": "object",
+        "required": [
+          "replacedId",
+          "byId",
+          "at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "replacedId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "byId": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "TimelineWindow": {
+        "type": "object",
+        "required": [
+          "from",
+          "to"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Timeline": {
+        "type": "object",
+        "required": [
+          "root",
+          "window",
+          "rows",
+          "ingestions",
+          "recalls",
+          "supersessions"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "root": {
+            "$ref": "#/components/schemas/TraceNode"
+          },
+          "window": {
+            "$ref": "#/components/schemas/TimelineWindow"
+          },
+          "rows": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineRow"
+            }
+          },
+          "ingestions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineIngestion"
+            }
+          },
+          "recalls": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineRecall"
+            }
+          },
+          "supersessions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TimelineSupersession"
+            }
+          }
+        }
+      },
+      "UsageMonth": {
+        "type": "object",
+        "required": [
+          "from",
+          "to",
+          "resetsAt"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "from": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "to": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "resetsAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "Null with no plan, and where the credits never reset."
+          }
+        }
+      },
+      "UsageBalance": {
+        "type": "object",
+        "required": [
+          "left",
+          "included",
+          "bought",
+          "rolledOver",
+          "spent"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "left": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "included": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "bought": {
+            "type": "number"
+          },
+          "rolledOver": {
+            "type": "number",
+            "description": "Unused included credits carried from earlier months."
+          },
+          "spent": {
+            "type": "number"
+          }
+        }
+      },
+      "UsageProjectMonth": {
+        "type": "object",
+        "required": [
+          "slug",
+          "credits",
+          "ingestions",
+          "recalls",
+          "creditCap",
+          "creditCapLeft",
+          "ingestionCap",
+          "ingestionCapLeft"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "slug": {
+            "type": "string"
+          },
+          "credits": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Credits this project spent this month. Null with no plan."
+          },
+          "ingestions": {
+            "type": "integer"
+          },
+          "recalls": {
+            "type": "integer"
+          },
+          "creditCap": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "creditCapLeft": {
+            "type": [
+              "number",
+              "null"
+            ]
+          },
+          "ingestionCap": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          },
+          "ingestionCapLeft": {
+            "type": [
+              "integer",
+              "null"
+            ]
+          }
+        }
+      },
+      "UsageSnapshot": {
+        "type": "object",
+        "required": [
+          "month",
+          "balance",
+          "metered"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "month": {
+            "$ref": "#/components/schemas/UsageMonth"
+          },
+          "balance": {
+            "oneOf": [
+              {
+                "$ref": "#/components/schemas/UsageBalance"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Null on a deployment with no plan."
+          },
+          "project": {
+            "$ref": "#/components/schemas/UsageProjectMonth"
+          },
+          "projects": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UsageProjectMonth"
+            },
+            "description": "With the management key: every live project, heaviest spender first."
+          },
+          "metered": {
+            "type": "boolean"
+          }
+        }
+      }
+    }
+  }
+}

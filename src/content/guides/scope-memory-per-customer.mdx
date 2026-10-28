@@ -1,0 +1,244 @@
+---
+title: Scope memory per customer
+description: Keep each customer's facts out of every other customer's answers, using identities, traits and rule audiences in one past.dev project.
+---
+
+Say your support agent serves two customers, Northwind Traders and Contoso,
+from one past.dev project. Both ask "what's our renewal price?" Each should get
+its own number and never see the other's.
+
+In this guide you'll give each user an identity with a `company` trait, create
+one audience per company, send each customer's facts to its audience, and then
+ask the same question as three different people. You'll also hit, and fix, the
+mistake that leaks data between customers.
+
+You need the API key and the `curl` and `jq` setup from the
+[quickstart](/quickstart). Doing the quickstart first helps, because its notes
+show up in this guide's results.
+
+## How it fits together
+
+- An **identity** is a reader. It can carry **traits**, like `company: northwind`.
+- An **audience** is a group of identities. A `rule` audience picks its members
+  by trait, so new users join it as soon as they have the right trait.
+- A **data point** sent with `audience` can only be read by that audience's
+  members. A data point sent without one goes to the built-in `project`
+  audience, which **every identity can read**.
+
+<Steps>
+  <Step title="Create the users">
+    Create one identity per person and tag each with their company:
+
+    ```bash
+    put() {
+      curl -sS -X PUT "https://api.past.dev/api/v1$1" \
+        -H "Authorization: Bearer $PAST_API_KEY" \
+        -H 'Content-Type: application/json' -d "$2" | jq -c "$3"
+    }
+
+    put /identities/maya@northwind.example '{"traits":{"company":"northwind"}}' '{identity, traits}'
+    put /identities/leo@contoso.example '{"traits":{"company":"contoso"}}' '{identity, traits}'
+    ```
+
+    ```json
+    {"identity":"maya@northwind.example","traits":{"company":"northwind"}}
+    {"identity":"leo@contoso.example","traits":{"company":"contoso"}}
+    ```
+
+    Use your own user ids here, such as the ids from your auth system. Any
+    string up to 200 characters works.
+  </Step>
+  <Step title="Create one audience per company">
+    A `rule` audience includes every identity whose traits match:
+
+    ```bash
+    put /audiences/northwind '{"kind":"rule","name":"Northwind Traders",
+      "rule":{"match":"all","conditions":[{"trait":"company","operator":"is","values":["northwind"]}]}}' \
+      '{slug, kind, memberCount}'
+
+    put /audiences/contoso '{"kind":"rule","name":"Contoso",
+      "rule":{"match":"all","conditions":[{"trait":"company","operator":"is","values":["contoso"]}]}}' \
+      '{slug, kind, memberCount}'
+    ```
+
+    ```json
+    {"slug":"northwind","kind":"rule","memberCount":1}
+    {"slug":"contoso","kind":"rule","memberCount":1}
+    ```
+
+    `memberCount: 1` confirms each rule found its user. A count of `0` means no
+    identity has a matching trait yet. Check the trait spelling from step 1.
+
+    Create the audience **before** you send data to it. Sending to an audience
+    that doesn't exist fails with `400 audience-unknown`.
+  </Step>
+  <Step title="Send each customer's facts to its audience">
+    Add `audience` to each data point. The third note has no audience on
+    purpose: a status update every customer should see.
+
+    ```bash
+    send() {
+      curl -sS https://api.past.dev/api/v1/ingest \
+        -H "Authorization: Bearer $PAST_API_KEY" \
+        -H 'Content-Type: application/json' \
+        -d "$1" | jq -r '"\(.sourceId): \(.status)  ingestionId=\(.ingestionId)"'
+    }
+
+    send '{"id":"northwind-renewal","label":"Deal note","audience":"northwind","timestamp":"2026-09-03T11:00:00Z",
+      "content":"Northwind Traders renewal: finance approved $18,000 per year for the Growth plan, 20 seats, renewing on November 1."}'
+
+    send '{"id":"contoso-renewal","label":"Deal note","audience":"contoso","timestamp":"2026-09-12T16:00:00Z",
+      "content":"Contoso renewal: procurement agreed $42,000 per year for the Enterprise plan, 75 seats, renewing on December 15."}'
+
+    send '{"id":"status-eu-sso","label":"Status page","timestamp":"2026-10-20T08:00:00Z",
+      "content":"Status update: the EU SSO login outage is resolved. Customers on EU domains can sign in again."}'
+    ```
+
+    Wait until all three are `completed`, as in
+    [quickstart step 2](/quickstart). These took about a minute in my run.
+  </Step>
+  <Step title="Ask the same question as three people">
+    ```bash
+    ask() {
+      echo "## $1"
+      curl -sS https://api.past.dev/api/v1/recall \
+        -H "Authorization: Bearer $PAST_API_KEY" \
+        -H 'Content-Type: application/json' \
+        -d "{\"query\":\"What is our renewal price, and is SSO working again?\",\"identity\":\"$1\",\"limit\":6}" \
+        | jq -r '.results[] | "\(.rank). [\(.sources[0].sourceId)] \(.content[0:90])"'
+    }
+
+    ask maya@northwind.example
+    ask leo@contoso.example
+    ask visitor@example.com
+    ```
+
+    ```text
+    ## maya@northwind.example
+    1. [northwind-renewal] Northwind Traders renewal annual price: $18,000 per year.
+    2. [status-eu-sso] Status update: the EU SSO login outage is resolved. Customers on EU domains can sign in ag
+    3. [status-eu-sso] The EU SSO login outage is resolved (outcome).
+    4. [northwind-sso-ticket] SSO login fails for users on Northwind Traders’ EU domain (problem).
+    5. [northwind-sso-ticket] Raised an issue: SSO login failure on EU domain.
+    6. [northwind-sso-ticket] Support ticket from Northwind Traders: SSO login fails for users on their EU domain. Priya
+    ## leo@contoso.example
+    1. [contoso-renewal] Contoso renewal annual price: $42,000 per year.
+    2. [status-eu-sso] Status update: the EU SSO login outage is resolved. Customers on EU domains can sign in ag
+    3. [status-eu-sso] The EU SSO login outage is resolved (outcome).
+    4. [northwind-sso-ticket] SSO login fails for users on Northwind Traders’ EU domain (problem).
+    5. [contoso-renewal] Contoso renewal: procurement agreed $42,000 per year for the Enterprise plan, 75 seats, re
+    6. [northwind-sso-ticket] Raised an issue: SSO login failure on EU domain.
+    ## visitor@example.com
+    1. [status-eu-sso] The EU SSO login outage is resolved (outcome).
+    2. [status-eu-sso] Status update: the EU SSO login outage is resolved. Customers on EU domains can sign in ag
+    3. [northwind-sso-ticket] SSO login fails for users on Northwind Traders’ EU domain (problem).
+    4. [northwind-sso-ticket] Raised an issue: SSO login failure on EU domain.
+    5. [northwind-sso-ticket] Support ticket from Northwind Traders: SSO login fails for users on their EU domain. Priya
+    6. [status-eu-sso] Customers on EU domains can sign in again (outcome).
+    ```
+
+    The renewal prices are scoped correctly. Maya sees $18,000, Leo sees
+    $42,000, and the visitor, who isn't in either audience, sees neither. All
+    three see the status update.
+
+    But look at lines 4 and 6 for Leo. **A Contoso user can read Northwind's
+    support ticket.** That ticket came from the quickstart, which sent it without an
+    audience, so it went to the `project` audience that everyone can read.
+  </Step>
+  <Step title="Fix the leak">
+    Resend the ticket with the same `id`, the same content and timestamp, and
+    `audience` added:
+
+    ```bash
+    send '{"id":"northwind-sso-ticket","label":"Support ticket","audience":"northwind","timestamp":"2026-06-10T14:15:00Z",
+      "content":"Support ticket from Northwind Traders: SSO login fails for users on their EU domain. Priya Shah asked for a fix before their July security audit."}'
+    ```
+
+    ```text
+    northwind-sso-ticket: completed  ingestionId=381247a2-684d-4c95-9891-7e7be133d2b1
+    ```
+
+    When only the audience changes, past.dev moves the data point and the
+    memories built from it without processing it again. It returns `completed`
+    at once and charges nothing. Ask as Leo again:
+
+    ```bash
+    ask leo@contoso.example
+    ```
+
+    ```text
+    ## leo@contoso.example
+    1. [contoso-renewal] Contoso renewal annual price: $42,000 per year.
+    2. [status-eu-sso] Status update: the EU SSO login outage is resolved. Customers on EU domains can sign in ag
+    3. [status-eu-sso] The EU SSO login outage is resolved (outcome).
+    4. [status-eu-sso] Customers on EU domains can sign in again (outcome).
+    5. [contoso-renewal] Contoso renewal: procurement agreed $42,000 per year for the Enterprise plan, 75 seats, re
+    6. [contoso-renewal] Contoso renewal scheduled: December 15.
+    ```
+
+    The Northwind ticket is gone. The change took under three seconds in my
+    run, and Maya still sees the ticket.
+
+    Do the same for `northwind-kickoff` and `northwind-upgrade` from the
+    quickstart.
+  </Step>
+</Steps>
+
+## Rules worth remembering
+
+<Note type="warning" title="Send audience every time">
+  A data point's audience is whatever the **latest** send said. If you resend a
+  scoped data point and forget `audience`, it becomes readable by everyone
+  again. Put the audience in the same code path that builds the data point, so
+  it can't be left out.
+</Note>
+
+- **Unknown identities only see shared memory.** A recall as an identity
+  past.dev has never seen reads only the `project` audience, and doesn't create
+  the identity. That's why the visitor above saw only the status update and the
+  unscoped ticket.
+- **Metadata doesn't filter.** Putting `customer: northwind` in a data point's
+  `metadata` doesn't limit who can read it. Only `audience` does.
+- **Trait changes don't move old data.** If Leo's `company` changes, he joins
+  the new company's audience within seconds. Data points keep the audience they
+  were sent with. To apply a rule change immediately, call
+  `POST /audiences/{slug}/recompute`.
+- **Projects are the hard wall.** Audiences filter one body of memory, so a
+  leaked project key reaches every audience in it. Use separate projects for
+  staging and production, or for customers who need full isolation. The
+  free plan allows one project.
+
+## Troubleshooting
+
+Every error past.dev returns has the same shape. Match on `code`:
+
+```json
+{"code":"audience-unknown","status":400,"debugMessage":"No audience 'globex' exists in this project — create it in the console or with PUT /api/v1/audiences/globex","data":null}
+```
+
+| `code` | When I got it | Fix |
+| --- | --- | --- |
+| `missing-api-key` (401) | No `Authorization` header. Usually `$PAST_API_KEY` is empty in this shell. | Run `echo ${PAST_API_KEY:0:8}`. It should print `past_sk_`. |
+| `malformed-api-key` (401) | The key is cut off or isn't a past.dev key. | Copy the whole key from the console again. Project keys start with `past_sk_`. |
+| `audience-unknown` (400) | A data point names an audience that doesn't exist yet. | Create the audience first (step 2). Slugs are lowercase, 2 to 40 characters. |
+| `audience-rule-required` (400) | A `rule` audience was created without `rule`. | Add a `rule` with `match` and at least one condition. |
+| `audience-slug-reserved` (400) | Trying to create, change or delete the audience named `project`. | Pick another slug. `project` is built in and always readable by everyone. |
+| `identity-required` (400) | A recall without `identity`. | Every recall answers as someone. Pass the user's id, or a fixed id like `support-agent` for shared memory. |
+| `recall-level-invalid` (400) | `level` isn't one of `low`, `medium`, `high`, `extra-high`. | Fix the value, or leave `level` out. It defaults to `low`. |
+| `content-required` (400) | `content` is empty or only whitespace. | Send the text of the note. |
+| 400 with an **empty body** | A `timestamp` that isn't ISO 8601, such as `"last tuesday"`. | Use the form `2026-04-02T09:30:00Z`. |
+| Another customer's facts in results | The data point was sent without `audience`. | Resend it with `audience` (step 5). |
+| `results` is empty | The data point is still processing, or the identity can't read it. | Check its status, then check the identity's traits match the audience rule. |
+
+<Note type="info" title="Unknown fields are accepted">
+  The API reference says ingest refuses unknown fields, but when I sent a
+  `tags` field it returned `202` and stored the data point anyway. Check field
+  names carefully: a typo like `audiance` won't fail, and the data point will be
+  readable by everyone.
+</Note>
+
+## Next step
+
+<Card title="API reference" icon="code-simple" href="/api/introduction">
+  Every endpoint used here, with a Try it panel that runs against your own project.
+</Card>

@@ -28,7 +28,8 @@
     "typecheck": "tsc --noEmit",
     "setup:cloudflare": "npm install --save-dev --save-exact @opennextjs/cloudflare@1.20.12 wrangler@4.148.0",
     "check": "npx --yes --package=@thallylabs/cli@latest thally check",
-    "starter:update": "npx --yes --package=@thallylabs/cli@latest thally starter update"
+    "starter:update": "npx --yes --package=@thallylabs/cli@latest thally starter update",
+    "openapi:sync": "tsx scripts/sync-past-openapi.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.78.0",

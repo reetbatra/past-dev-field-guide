@@ -1,49 +1,84 @@
 ---
 title: API overview
 navTitle: Overview
-description: What this API reference covers and how to try every request live.
+description: The past.dev memory endpoints, how to authenticate, and the error shape every endpoint shares.
 ---
 
-This reference documents the Sample Posts API — a small, working API backed by
-the public [JSONPlaceholder](https://jsonplaceholder.typicode.com) service.
-Every endpoint page has a **Send** button that runs the real request from your
-browser, so you can inspect live responses before writing a line of code.
+This reference covers the 16 past.dev endpoints this guide uses: sending and
+deleting data points, recall, identities, audiences and usage. The endpoint
+pages are generated from past.dev's own published contract at
+[past.dev/openapi.json](https://past.dev/openapi.json), copied without edits.
+Organization management, webhooks and request tracing are left out. The
+[official reference](https://past.dev/docs/memory-api/api-reference) has all
+of them.
 
 ## Base URL
 
-All requests use the same base URL:
-
 ```text
-https://jsonplaceholder.typicode.com
+https://api.past.dev
 ```
 
-## Try your first request
+Every path starts with `/api/v1`.
+
+## Authentication
+
+Send your project key as a bearer token:
+
+```bash
+curl -sS https://api.past.dev/api/v1/usage \
+  -H "Authorization: Bearer $PAST_API_KEY"
+```
+
+The key picks the project, so no request body names one. Create keys in the
+[console](https://app.past.dev) under **API keys**. Project keys start with
+`past_sk_`.
+
+## Errors
+
+Every error has the same JSON shape. Branch on `code`, not on the message:
+
+```json
+{"code":"identity-required","status":400,"debugMessage":"identity is required: the identity this read answers as (product/features/platform/identities.md)","data":null}
+```
+
+`data` carries extra detail for some codes. For example, `out-of-credits` (402)
+includes `creditsLeft`, `creditsNeeded` and `resetsOn`. The
+[troubleshooting table](/guides/scope-memory-per-customer#troubleshooting)
+lists the codes I hit and how to fix each one.
+
+## Try a request
 
 <Steps>
-  <Step title="Open an endpoint">
-    Pick **Get a post** from the Posts group in the sidebar.
+  <Step title="Add your key">
+    Open **Read this month's credits** under **Usage** and press **Try it**.
+    You'll see three **Authorization** fields, because past.dev accepts three
+    kinds of key. Paste your project key into the first one, the field whose
+    hint says it begins with `past_sk_`. Leave the other two empty.
+
+    The key stays in this browser tab's session storage until you close the
+    tab. Requests pass through this site's server on the way to past.dev,
+    because browsers can't call the API directly from another domain. If that
+    isn't acceptable for your key, use `curl` instead, or create a separate key
+    for trying things out and revoke it afterwards.
   </Step>
   <Step title="Send it">
-    Keep the default id of `1` and press **Send**. The response panel shows a
-    real `200` with the post body.
+    Press **Send**. You get your credit balance and this month's ingestion and
+    recall counts. This call is free.
   </Step>
-  <Step title="Change the input">
-    Try an id above `100` to see the API's `404` behavior.
+  <Step title="Recall from your own project">
+    Open **Retrieve ranked memory documents** under **Recall**, enter a `query` and an
+    `identity`, and send. A recall costs 0.1 credit.
   </Step>
 </Steps>
 
-Writes are safe to experiment with: the demo server accepts `POST` requests
-and echoes the created resource back with a generated id without storing it.
+## Keep the reference current
 
-## Make this reference yours
+The endpoint pages come from `openapi.json` in this site's repository. To
+refresh it from past.dev:
 
-This sample exists so the reference has something real to show. To document
-your own API, replace `openapi.yaml` at the repository root with your
-specification — the endpoint pages, navigation, and playground regenerate from
-it on the next publish.
+```bash
+npm run openapi:sync
+```
 
-<Note type="info" title="Keep the overview pages">
-  Readers orient faster when a reference opens with what the API does, how to
-  authenticate, and one runnable request. Rewrite this page and
-  [Authentication](/api/authentication) for your API instead of deleting them.
-</Note>
+The script fails loudly if past.dev removes or renames one of the 16
+endpoints, so the reference can't silently keep a route that no longer exists.

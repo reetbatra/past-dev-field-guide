@@ -160,13 +160,12 @@ const brandPresets: Record<BrandPresetKey, BrandConfig> = {
 const brandPreset: BrandPresetKey = 'primary'
 
 export const siteConfig: SiteConfig = {
-  name: 'Thally Assignment',
+  name: 'past.dev field guide',
   description:
-    'Documentation for Thally Assignment.',
-  repoUrl: '',
+    'An unofficial, example-first guide to the past.dev memory API: send dated facts, recall what is true now, and scope memory per customer.',
+  repoUrl: 'https://github.com/reetbatra/past-dev-field-guide',
   links: [
-    { label: 'Get started', href: '/quickstart' },
-    { label: 'Changelog', href: '/changelog' },
+    { label: 'Official past.dev docs', href: 'https://past.dev/docs/memory-api/overview' },
   ],
   brand: brandPresets[brandPreset],
   brandPreset,

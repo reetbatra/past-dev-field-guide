@@ -1,47 +1,181 @@
 ---
-title: Quickstart
-description: Guide a new reader through one useful workflow and show them how to verify it.
+title: Give your agent a memory
+navTitle: Quickstart
+description: Send three dated notes about a customer, then ask past.dev what's true now and what was true in March. About ten minutes, most of it waiting.
 ---
 
-A strong quickstart produces one meaningful result. Replace the placeholders
-below with the shortest supported path for your product.
+A customer, Northwind Traders, signs up on the Starter plan in January,
+upgrades to Growth in April, and files a support ticket in June. You'll send
+those three notes to past.dev, then ask it the question a support agent would:
+**what plan are they on, and how many seats do they have?**
+
+You'll see past.dev return the April upgrade first and mark the January plan as
+replaced. Then you'll ask the same question as of March 1 and get the January
+answer instead.
 
 ## Before you begin
 
-List only the requirements needed for this workflow:
+You need:
 
-- An account or credential, when required
-- A supported runtime, device, browser, or operating system
-- Permission to create or change the resource used in the example
+- A past.dev account. [Sign up](https://sso.past.dev/sign-up) free. No card is
+  needed, and you start with 150,000 credits. This page uses about 3.
+- A project API key. In the [console](https://app.past.dev), open **API keys**
+  and create one. It starts with `past_sk_`.
+- `curl`, and `jq` 1.6 or later (`brew install jq` or `sudo apt-get install jq`).
+
+Put the key in your shell, not in your code:
+
+```bash
+export PAST_API_KEY='past_sk_...'
+```
+
+<Tip>
+  New accounts get one project, `default-project`, and your key already points
+  at it. Every request below goes to that project.
+</Tip>
 
 <Steps>
-  <Step title="Install the required tool">
-    Give readers one recommended installation command.
+  <Step title="Send three dated notes">
+    Each note is one data point. `id` is yours to choose, and resending the same
+    `id` later replaces that note. `timestamp` is when it happened, not when you
+    send it. That's what lets past.dev order facts correctly.
 
     ```bash
-    npm install your-package
+    send() {
+      curl -sS https://api.past.dev/api/v1/ingest \
+        -H "Authorization: Bearer $PAST_API_KEY" \
+        -H 'Content-Type: application/json' \
+        -d "$1" | jq -r '"\(.sourceId): \(.status)  ingestionId=\(.ingestionId)"'
+    }
+
+    send '{"id":"northwind-kickoff","label":"Call notes","timestamp":"2026-01-14T10:00:00Z",
+      "content":"Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support."}'
+
+    send '{"id":"northwind-upgrade","label":"Email","timestamp":"2026-04-02T09:30:00Z",
+      "content":"Email from Priya Shah at Northwind Traders: we have upgraded from the Starter plan to the Growth plan and now have 20 seats, effective today."}'
+
+    send '{"id":"northwind-sso-ticket","label":"Support ticket","timestamp":"2026-06-10T14:15:00Z",
+      "content":"Support ticket from Northwind Traders: SSO login fails for users on their EU domain. Priya Shah asked for a fix before their July security audit."}'
     ```
+
+    Each one returns `202` and is queued:
+
+    ```text
+    northwind-kickoff: queued  ingestionId=5fe239a7-ccbf-4935-bcc7-6aa8ee24792a
+    northwind-upgrade: queued  ingestionId=0d87ce12-f247-4d6f-8e86-46c16fbc2996
+    northwind-sso-ticket: queued  ingestionId=ba835dc5-eb9a-4b22-b516-15fcc4167767
+    ```
+
+    Running this again is safe. A note whose `id`, content, label and
+    timestamp haven't changed comes back `completed` right away, and you
+    aren't charged for it.
   </Step>
-  <Step title="Add the minimum configuration">
-    Include only the values needed for the first successful run.
+  <Step title="Wait until all three are processed">
+    past.dev reads each note in the background and pulls out the facts in it.
+    A note isn't in recall results until its status is `completed`. Check with
+    the `ingestionId` from step 1:
 
     ```bash
-    your-cli init
+    curl -sS https://api.past.dev/api/v1/ingest/INGESTION_ID \
+      -H "Authorization: Bearer $PAST_API_KEY" | jq -c '{status, settled}'
     ```
+
+    ```json
+    {"status":"processing","settled":false}
+    ```
+
+    Repeat until you see `"status":"completed"`. In my runs, a note took
+    anywhere from 1 to 8 minutes, so this is the slow part of the page.
+
+    `settled` turns `true` once nothing in the whole project is still
+    processing. When it's `true`, all three of your notes are done.
   </Step>
-  <Step title="Complete the first task">
-    Use a realistic example that produces an observable result.
+  <Step title="Ask what's true now">
+    A recall needs a question and an `identity`, the reader it answers as. The
+    notes were sent with no audience, so any identity can read them.
 
     ```bash
-    your-cli start
+    curl -sS https://api.past.dev/api/v1/recall \
+      -H "Authorization: Bearer $PAST_API_KEY" \
+      -H 'Content-Type: application/json' \
+      -d '{"query":"What plan is Northwind Traders on, and how many seats do they have?",
+           "identity":"support-agent","limit":8}' \
+      | jq -r '.results[] | "\(.rank). [\(.artifact.kind)] \(.content)\(if .artifact.supersededAt then "  (replaced \(.artifact.supersededAt[0:10]))" else "" end)"'
     ```
+
+    This came back in about a second:
+
+    ```text
+    1. [source] Email from Priya Shah at Northwind Traders: we have upgraded from the Starter plan to the Growth plan and now have 20 seats, effective today.
+    2. [claim] Priya Shah: Northwind Traders seats: 20 seats (exactly). Effective from 2026-04-02.
+    3. [source] Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support.
+    4. [observation] Northwind Traders signed up for the Starter plan (action).  (replaced 2026-04-02)
+    5. [claim] Priya Shah: Northwind Traders plan: Starter plan. Effective until 2026-04-01.
+    6. [observation] Priya Shah: Northwind Traders upgraded from the Starter plan to the Growth plan (transition).
+    7. [claim] Priya Shah: Northwind Traders plan: Growth plan. Effective from 2026-04-02.
+    8. [temporal-anchor] Priya Shah: Northwind Traders upgraded to the Growth plan (when): today. Resolved to 2026-04-02.
+    ```
+
+    The April email ranks first. The January sign-up is still there, because
+    it's true history, but it's marked as replaced on April 2. Notice line 8:
+    the email only said "effective today", and past.dev worked out that
+    "today" meant April 2 from the note's `timestamp`.
+
+    Your ranks and wording will differ a little. past.dev uses a model to pull
+    facts out of each note.
   </Step>
-  <Step title="Verify the result">
-    State exactly what the reader should see and how to recover when it does not appear.
+  <Step title="Ask what was true in March">
+    Add `queryTimestamp` to ask as of a past date. past.dev answers as if
+    nothing after that date had happened yet:
+
+    ```bash
+    curl -sS https://api.past.dev/api/v1/recall \
+      -H "Authorization: Bearer $PAST_API_KEY" \
+      -H 'Content-Type: application/json' \
+      -d '{"query":"What plan is Northwind Traders on, and how many seats do they have?",
+           "identity":"support-agent","limit":5,"queryTimestamp":"2026-03-01T00:00:00Z"}' \
+      | jq -r '.asOf, (.results[] | "\(.rank). [\(.artifact.kind)] \(.content)")'
+    ```
+
+    ```text
+    2026-03-01T00:00:00Z
+    1. [observation] Northwind Traders signed up for the Starter plan (action).
+    2. [source] Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support.
+    3. [claim] Starter plan seat count: 5 seats (exactly).
+    4. [claim] Northwind Traders main contact: Priya Shah.
+    5. [mention] Mentioned an event: Kickoff call.
+    ```
+
+    As of March, Northwind is on Starter with 5 seats, and nothing is marked as
+    replaced yet. The upgrade and the ticket don't appear, because they hadn't
+    happened.
   </Step>
 </Steps>
 
-## Choose the next task
+## Check that it worked
 
-Link to the guide that naturally follows this result. Avoid ending the reader’s
-journey with a generic list of every feature.
+You're done when step 3 ranks the April upgrade above the January sign-up,
+and step 4 returns only January facts.
+
+If step 3 comes back with an empty `results` array, at least one note is still
+processing. Go back to step 2.
+
+## One thing to watch
+
+past.dev links an old value to a new one when both are the same property. In
+the run above it linked the two plan claims, but it filed the January seat
+count as `Starter plan seat count: 5 seats` and the April one as `Northwind
+Traders seats: 20 seats`. Those are different properties to past.dev, so the
+5-seat claim came back without `supersededAt`.
+
+So don't treat "no `supersededAt`" as "still true". Give your model the
+results in rank order, with their dates, and let it read the newest evidence
+first. Writing notes that name things the same way each time ("Northwind
+Traders seats") also helps.
+
+## Next step
+
+<Card title="Scope memory per customer" icon="grid-round" href="/guides/scope-memory-per-customer">
+  These notes are readable by every identity in your project. The next guide
+  limits each customer's facts to that customer's users.
+</Card>

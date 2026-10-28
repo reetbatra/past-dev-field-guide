@@ -1,0 +1,278 @@
+---
+title: Build a docs site for an API with Thally
+navTitle: How this site was built
+description: Scaffold a Thally site, write a quickstart and a guide from real API calls, generate the reference from the API's own OpenAPI file, and publish. With every snag I hit and its fix.
+---
+
+This site is an unofficial guide to [past.dev](https://past.dev), a memory API
+for AI agents. I built it with [Thally](https://thally.io), an open-source
+docs framework on Next.js. This page shows how, so you can build the same kind
+of site for an API you know: a quickstart, a task guide, and a reference with a
+working **Try it** button.
+
+Plan on about two hours. Most of it goes into writing, not setup.
+
+The source is at
+[github.com/reetbatra/past-dev-field-guide](https://github.com/reetbatra/past-dev-field-guide).
+
+## Prerequisites
+
+- Node.js 22.14 or later (20.19+ also works), npm and Git.
+- A GitHub account, and a Vercel account if you publish the way I did.
+- An API you can call for real, with a key, and its OpenAPI file if it
+  publishes one. past.dev publishes one at
+  [past.dev/openapi.json](https://past.dev/openapi.json).
+
+## 1. Scaffold the site
+
+```bash
+npx --yes create-thally-docs@latest my-docs --yes --install
+cd my-docs
+npm run dev
+```
+
+That took 27 seconds. It installs dependencies, makes the first Git commit
+and serves the starter at [localhost:3040](http://localhost:3040).
+
+You'll edit three places:
+
+| Path | What it controls |
+| --- | --- |
+| `src/content/*.mdx` | The pages. Each needs `title` and `description` frontmatter. |
+| `docs.json` | Tabs, sidebar groups, page order, logo, favicon, and the API reference source. |
+| `src/data/site.ts` | The site name, description and header links. |
+
+Leave the rest of `src/` and `starter-release.json` alone. Thally upgrades
+those with `npm run starter:update`, and your edits would conflict.
+
+## 2. Keep secrets out of Git
+
+Do this before you touch anything else. The scaffold creates two files with
+the same 133 lines of commented settings:
+
+- `.env.example`, which is **committed** and meant as a template.
+- `.env.local`, which is **ignored by Git** and where secrets go.
+
+They look identical in an editor, and my API key ended up in the wrong one. I
+caught it with `git diff` before committing. Check before every commit:
+
+```bash
+git diff --cached | grep -E 'past_sk_|sk-|api[_-]?key' && echo "STOP: secret staged"
+```
+
+Then put your key in `.env.local` and nowhere else:
+
+```bash
+read -s "k?API key: " && echo "PAST_API_KEY=$k" >> .env.local && unset k
+```
+
+`read -s` keeps the key off your screen and out of your shell history. The
+`"k?prompt"` form is zsh. In bash, use `read -s -p "API key: " k`.
+
+## 3. Clear out the starter
+
+The starter has eight placeholder pages and a sample "Posts" API. Delete what
+you won't use, and remove the same pages from `docs.json` in the same change:
+
+```bash
+git rm src/content/components.mdx src/content/customization.mdx \
+  src/content/guides/*.mdx src/content/api/authentication.mdx openapi.yaml
+```
+
+Set your identity in `src/data/site.ts`:
+
+```ts
+export const siteConfig: SiteConfig = {
+  name: 'past.dev field guide',
+  description: 'An unofficial, example-first guide to the past.dev memory API.',
+  repoUrl: 'https://github.com/reetbatra/past-dev-field-guide',
+  links: [
+    { label: 'Official past.dev docs', href: 'https://past.dev/docs/memory-api/overview' },
+  ],
+  // brand, brandPreset and brandPresets stay as generated
+}
+```
+
+If you're documenting someone else's product, say so on the first page and
+link to their official docs. Don't use their logo. This site has an
+"unofficial guide" note on its introduction and its own clock mark.
+
+## 4. Run the API before you write about it
+
+I didn't write a single example until I'd run it. For past.dev that meant
+sending three dated notes, waiting for them to process, and recalling. It
+turned up three things the docs needed to say that I wouldn't have guessed:
+
+- Processing a note took anywhere from **1 to 8 minutes**. A quickstart that
+  says "now recall" right after sending would fail for most readers.
+- Moving a note into an audience took effect in **under three seconds** and
+  cost nothing, which made the "fix the leak" step possible.
+- The API **accepted a misspelled field** (`audiance`) without an error, so a
+  typo silently leaves data readable by everyone. That became a warning in the
+  guide.
+
+I kept a small shell helper that reads the key from `.env.local` and calls the
+API, then pasted the commands into the pages only after they worked. After
+writing each page, I ran its commands again, exactly as printed, and replaced
+the sample output with what came back.
+
+## 5. Write the pages
+
+Thally pages are MDX with built-in components. I used:
+
+- `<Steps>` and `<Step title="...">` for the quickstart and the guide.
+- `<Note type="warning" title="...">` and `<Tip>` for asides.
+- `<Card>` and `<CardGroup cols="2">` for next steps.
+- `<Hero>` on the introduction, which has `mode: home` in its frontmatter.
+
+Then lay out the navigation in `docs.json`. Each string in `pages` is a path
+under `src/content/` without `.mdx`:
+
+```json
+"tabs": [
+  {
+    "tab": "Get started",
+    "groups": [
+      { "group": "Get started", "pages": ["introduction", "quickstart"] },
+      { "group": "Guides", "pages": ["guides/scope-memory-per-customer"] }
+    ]
+  },
+  {
+    "tab": "API Reference",
+    "groups": [{ "group": "Overview", "pages": ["api/introduction"] }],
+    "api": { "source": "openapi.json" }
+  },
+  { "tab": "Changelog", "href": "/changelog" }
+]
+```
+
+Run Thally's checker after each page:
+
+```bash
+npm run check -- --ci
+```
+
+A broken internal link fails the check. A missing description, a page left
+out of `docs.json`, or a near-empty page comes back as a warning. It caught my
+changelog when I dropped its tab.
+
+## 6. Generate the reference from the API's own spec
+
+`"api": { "source": "openapi.json" }` turns every operation in the file into a
+page with a **Try it** panel. The panel sends requests through a relay on your
+docs server, so the API doesn't need CORS headers.
+
+past.dev's spec has 34 operations, including organization management and
+request tracing that this guide doesn't cover. You have two ways to show only
+the ones you want:
+
+- **Hide them in `docs.json`.** Add an `overrides` entry per operation, keyed
+  by `METHOD /path`, with `"hidden": true`. The spec file stays exactly as
+  published.
+- **Filter the file.** I wrote
+  [`scripts/sync-past-openapi.ts`](https://github.com/reetbatra/past-dev-field-guide/blob/main/scripts/sync-past-openapi.ts),
+  which downloads the spec, keeps 16 operations unchanged, and fails if past.dev
+  removes one of them. `npm run openapi:sync` refreshes it.
+
+I picked the script because it fails if past.dev renames or removes an
+endpoint the guide relies on. With overrides, a renamed endpoint would just
+appear in the sidebar without anyone noticing.
+
+## 7. Add your logo
+
+Set the logo and favicon in `docs.json`. The files go in `public/`:
+
+```json
+"navbar": {
+  "primary": { "label": "Quickstart", "href": "/quickstart" },
+  "logo": {
+    "light": "/brand/field-guide-logo-light.svg",
+    "dark": "/brand/field-guide-logo-dark.svg",
+    "showTitle": false
+  }
+},
+"favicon": {
+  "light": "/brand/field-guide-mark.svg",
+  "dark": "/brand/field-guide-mark.svg"
+}
+```
+
+Keep the logo at most **160 pixels wide at 28 high**. Thally scales wider
+logos down, and my first one, at 196 pixels, came out with unreadable text.
+
+## 8. Publish
+
+Build locally first:
+
+```bash
+npm run typecheck
+npm run build
+```
+
+Then push and deploy. I used Vercel:
+
+```bash
+gh repo create past-dev-field-guide --public --source . --push
+npx vercel --prod
+```
+
+Vercel detects Next.js. A public site needs no environment variables: Thally
+reads the production URL from Vercel for canonical links and social cards. Set
+`THALLY_SITE_URL` only for a custom domain. Don't add your API key to Vercel.
+The site never calls the API itself; readers' **Try it** requests carry their
+own keys.
+
+<Tip>
+  Thally also runs a managed host, Thally Cloud. Create the site at
+  [app.thally.io](https://app.thally.io), connect the repo through its GitHub
+  App, and it publishes on each push. You need it for the AI answers widget,
+  which only works on a Cloud-linked site.
+</Tip>
+
+## Snags I hit, and the fixes
+
+**My lowercase name got capitalized.** I named the site `past.dev field
+guide` and the header showed "Past.dev field guide". Thally's
+`displaySiteName` uppercases the first letter of every site name, and nothing
+turns that off. The fix was a wordmark SVG with `showTitle: false`, so the name
+is never rendered as text. Plan for this if your brand starts lowercase.
+
+**I couldn't find where the logo goes.** Nothing in the starter's `site.ts` or
+`docs.json` mentions a logo, and the default leaf is wired into the header
+component. It's in Thally's
+[branding guide](https://docs.thally.io/guides/branding-and-theming) as
+`navbar.logo`. Read that guide before you search `src/` like I did.
+
+**The Try it panel keeps readers' keys.** It stores what a reader types in the
+browser tab's session storage until the tab closes, and requests pass through
+your docs server. That's reasonable, but Thally's API reference guide doesn't
+say so. Tell your readers. The [API overview](/api/introduction) here does.
+
+**Three identical key fields.** past.dev's spec lists three ways to
+authenticate: a project key, a management key and an agent token. Thally's
+**Try it** panel shows one field per scheme, and all three are labeled
+"Authorization, Bearer token". Only the small hint under each tells them
+apart. I couldn't fix that from the docs side, so the
+[API overview](/api/introduction) tells readers which field to use.
+
+**The reference sidebar followed the API's tags.** past.dev tags its endpoints
+in lowercase (`audiences`, `debugging`, `identities`), and Thally lists them
+alphabetically, so audiences came before recall. Setting `api.groups` in
+`docs.json` replaces the tag groups with your own order. Each page entry is
+an operation key such as `"POST /api/v1/recall"`.
+
+**I kept seeing an old build.** I restarted `npm run start` after a rebuild,
+but the old server still held port 3040. The new one failed with
+`EADDRINUSE` in the background. Free the port first:
+
+```bash
+kill $(lsof -ti tcp:3040)
+npm run start
+```
+
+## What to do next
+
+- Write your quickstart around the API's most surprising behavior, not its
+  first endpoint. For past.dev that's "it knows when a fact changed".
+- Re-run every command on the site before each publish. APIs change, and the
+  output on a docs page goes stale without anyone noticing.

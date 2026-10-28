@@ -17,9 +17,18 @@
   },
   "navbar": {
     "primary": {
-      "label": "Get started",
+      "label": "Quickstart",
       "href": "/quickstart"
+    },
+    "logo": {
+      "light": "/brand/field-guide-logo-light.svg",
+      "dark": "/brand/field-guide-logo-dark.svg",
+      "showTitle": false
     }
+  },
+  "favicon": {
+    "light": "/brand/field-guide-mark.svg",
+    "dark": "/brand/field-guide-mark.svg"
   },
   "tabs": [
     {
@@ -33,23 +42,9 @@
           ]
         },
         {
-          "group": "Design your docs",
+          "group": "Guides",
           "pages": [
-            "components",
-            "customization"
-          ]
-        }
-      ]
-    },
-    {
-      "tab": "Guides",
-      "groups": [
-        {
-          "group": "Work with Thally",
-          "pages": [
-            "guides/create-a-site",
-            "guides/work-with-the-cli",
-            "guides/connect-ai-tools"
+            "guides/scope-memory-per-customer"
           ]
         }
       ]
@@ -60,14 +55,67 @@
         {
           "group": "Overview",
           "pages": [
-            "api/introduction",
-            "api/authentication"
+            "api/introduction"
           ]
         }
       ],
       "api": {
-        "source": "openapi.yaml"
+        "source": "openapi.json",
+        "groups": [
+          {
+            "group": "Send memory",
+            "pages": [
+              "POST /api/v1/ingest",
+              "POST /api/v1/ingest/batch",
+              "GET /api/v1/ingest/{ingestionId}",
+              "DELETE /api/v1/ingest/{ingestionId}"
+            ]
+          },
+          {
+            "group": "Recall",
+            "pages": [
+              "POST /api/v1/recall"
+            ]
+          },
+          {
+            "group": "Identities",
+            "pages": [
+              "PUT /api/v1/identities/{identity}",
+              "PATCH /api/v1/identities/{identity}",
+              "GET /api/v1/identities/{identity}",
+              "GET /api/v1/identities",
+              "DELETE /api/v1/identities/{identity}"
+            ]
+          },
+          {
+            "group": "Audiences",
+            "pages": [
+              "PUT /api/v1/audiences/{slug}",
+              "GET /api/v1/audiences/{slug}",
+              "GET /api/v1/audiences",
+              "POST /api/v1/audiences/{slug}/recompute",
+              "DELETE /api/v1/audiences/{slug}"
+            ]
+          },
+          {
+            "group": "Usage",
+            "pages": [
+              "GET /api/v1/usage"
+            ]
+          }
+        ]
       }
+    },
+    {
+      "tab": "How this site was built",
+      "groups": [
+        {
+          "group": "Write-up",
+          "pages": [
+            "build-this-site"
+          ]
+        }
+      ]
     },
     {
       "tab": "Changelog",
@@ -75,6 +123,6 @@
     }
   ],
   "ai": {
-    "chat": true
+    "chat": false
   }
 }
