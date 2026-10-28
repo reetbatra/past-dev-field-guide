@@ -1,0 +1,98 @@
+---
+title: How past.dev decides what's true
+navTitle: How memory works
+description: What happens between sending a note and getting an answer, and why past.dev keeps dates where most agent memory throws them away.
+---
+
+Most agent memory stores chunks of text and returns the ones that look like the
+question. Ask "what plan is this customer on?" and you get every chunk that
+mentions a plan. Nothing says which one is current, so the model guesses.
+
+past.dev's answer is to keep the date on every fact and track when one fact
+replaces another. This page explains the pieces that make that work.
+
+## Data points: what you send
+
+A data point is one piece of dated text: a call note, an email, a ticket. You
+give it three things that matter:
+
+- **`content`**: the text, as written.
+- **`timestamp`**: when it happened. If you leave it out, past.dev uses the
+  moment you sent it, which is wrong for anything you import later.
+- **`id`**: your own stable name for it. Sending the same `id` again replaces
+  the data point and everything past.dev learned from it. A new `id` adds a new
+  fact next to the old one.
+
+Sending costs 1 credit per 350 bytes, with a minimum of 1 per data point.
+
+## Memories: what past.dev learns
+
+After you send a data point, past.dev reads it in the background and pulls out
+short statements called memories. This is the processing step you wait for.
+It took between 20 seconds and 8 minutes in my tests.
+
+Each memory has a kind, in `artifact.kind`:
+
+| Kind | What it holds | Example |
+| --- | --- | --- |
+| `source` | Your data point, word for word | The April upgrade email |
+| `claim` | One property and its value | `Northwind Traders plan: Growth plan. Effective from 2026-04-02.` |
+| `observation` | Something that happened | `Northwind Traders signed up for the Starter plan (action).` |
+| `temporal-anchor` | A time expression, resolved to a date | `upgraded to the Growth plan (when): today. Resolved to 2026-04-02.` |
+| `mention` | A topic someone raised | `Raised an issue: SSO login failure on EU domain.` |
+| `rule` | An instruction or preference | |
+| `membership` | A member of a named group | |
+| `identity` | Two names for the same thing | |
+
+past.dev's docs say to treat any kind you don't recognize as a memory.
+
+## Replacement: how "current" works
+
+When a new `claim` sets a property that an older claim also set, past.dev marks
+the older one with `artifact.supersededAt`, the date it stopped being true. A
+recall returns both, because both are true history. In every recall I ran, the
+current fact ranked above the one it replaced.
+
+The match is by property, and a model names the properties. So the same fact,
+worded two ways, can end up as two properties that are never linked.
+[Track facts that change](/tutorials/track-facts-that-change#step-4-write-notes-past-dev-can-link)
+shows this happening and how to write around it.
+
+## Time: asking about the past
+
+Every recall has a moment it answers for, returned as `asOf`. By default that's
+now. Set `queryTimestamp` and past.dev answers as of that moment instead:
+anything that happened later is left out, and nothing is marked as replaced by
+a fact that didn't exist yet.
+
+## Identities and audiences: who sees what
+
+Every recall answers as an **identity**, a reader such as a user or an agent.
+Every data point belongs to an **audience**, a group of identities allowed to
+read it. A data point sent without one goes to `project`, which every identity
+can read.
+
+This is how one project can serve many customers.
+[Scope memory per customer](/guides/scope-memory-per-customer) sets it up.
+
+The project itself is the hard boundary. Nothing crosses between projects, and
+your API key decides which project a request reaches.
+
+## Recall: what comes back
+
+A recall costs 0.1 credit and returns up to 100 results by default. Each one
+has a `rank`, an `occurredAt` date, its `content`, its `artifact` (kind and,
+when replaced, `supersededAt`), and the `sources` it came from.
+
+`level` sets how much text to return: `low` (the default) is about 8,000
+tokens. Higher levels return more, up to your plan's limit. The free plan's
+limit is 8,000 tokens, so higher levels make no difference there.
+
+## The tradeoffs
+
+- **Answers aren't instant after sending.** Processing runs in the background,
+  so a fact you just sent isn't in recall results for a while.
+- **Extraction varies.** A model writes the memories, so wording and ranks
+  shift a little between runs on the same notes.
+- **Audiences filter, they don't isolate.** A leaked project key reaches every
+  audience in the project. Use separate projects where that matters.

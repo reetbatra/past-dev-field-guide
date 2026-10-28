@@ -42,9 +42,27 @@
           ]
         },
         {
-          "group": "Guides",
+          "group": "Concepts",
+          "pages": [
+            "concepts/how-memory-works"
+          ]
+        },
+        {
+          "group": "Tutorials",
+          "pages": [
+            "tutorials/track-facts-that-change"
+          ]
+        },
+        {
+          "group": "How-to guides",
           "pages": [
             "guides/scope-memory-per-customer"
+          ]
+        },
+        {
+          "group": "Reference",
+          "pages": [
+            "known-issues"
           ]
         }
       ]

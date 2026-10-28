@@ -1,132 +1,149 @@
 ---
 title: Build a docs site for an API with Thally
 navTitle: How this site was built
-description: Scaffold a Thally site, write a quickstart and a guide from real API calls, generate the reference from the API's own OpenAPI file, and publish. With every snag I hit and its fix.
+description: Create a Thally site for an HTTP API, write each page from requests you've run, generate the reference from the API's OpenAPI file, and publish on Vercel.
 ---
 
-This site is an unofficial guide to [past.dev](https://past.dev), a memory API
-for AI agents. I built it with [Thally](https://thally.io), an open-source
-docs framework on Next.js. This page shows how, so you can build the same kind
-of site for an API you know: a quickstart, a task guide, and a reference with a
-working **Try it** button.
+This article is for developers who want to document an HTTP API they can call,
+whether it's their own or one they use. You'll build a site like this one: an
+introduction, a quickstart with code in three languages, a tutorial, a how-to
+guide, a concepts page, a known-issues page, and an API reference whose
+**Try it** button sends real requests.
 
-Plan on about two hours. Most of it goes into writing, not setup.
+The finished example is the site you're reading,
+[past-dev-field-guide.vercel.app](https://past-dev-field-guide.vercel.app),
+built from [github.com/reetbatra/past-dev-field-guide](https://github.com/reetbatra/past-dev-field-guide).
+It documents [past.dev](https://past.dev), a memory API for AI agents. Every
+example below comes from building it.
 
-The source is at
-[github.com/reetbatra/past-dev-field-guide](https://github.com/reetbatra/past-dev-field-guide).
+Before you start, you need:
 
-## Prerequisites
+- Node.js 22.18 or later, npm, Git, and the GitHub CLI (`gh`).
+- A [Vercel](https://vercel.com) account and the Vercel CLI.
+- An API key for the API you're documenting, and its OpenAPI file if it
+  publishes one. past.dev's is at [past.dev/openapi.json](https://past.dev/openapi.json).
+- Some familiarity with Markdown. Thally pages are MDX, which is Markdown plus
+  components.
 
-- Node.js 22.14 or later (20.19+ also works), npm and Git.
-- A GitHub account, and a Vercel account if you publish the way I did.
-- An API you can call for real, with a key, and its OpenAPI file if it
-  publishes one. past.dev publishes one at
-  [past.dev/openapi.json](https://past.dev/openapi.json).
+## Step 1: Create the project
 
-## 1. Scaffold the site
+[Thally](https://thally.io) is an open-source docs framework built on Next.js.
+Its CLI creates a working site in one command.
+
+### Scaffold the site
 
 ```bash
-npx --yes create-thally-docs@latest my-docs --yes --install
-cd my-docs
+npx --yes create-thally-docs@latest past-dev-field-guide --yes --install
+cd past-dev-field-guide
 npm run dev
 ```
 
-That took 27 seconds. It installs dependencies, makes the first Git commit
-and serves the starter at [localhost:3040](http://localhost:3040).
+The command installs dependencies and makes the first Git commit. Open
+[localhost:3040](http://localhost:3040) to see the starter site.
 
-You'll edit three places:
+### Find the three files you'll edit
 
 | Path | What it controls |
 | --- | --- |
 | `src/content/*.mdx` | The pages. Each needs `title` and `description` frontmatter. |
-| `docs.json` | Tabs, sidebar groups, page order, logo, favicon, and the API reference source. |
+| `docs.json` | Navigation, logo, favicon, and the API reference source. |
 | `src/data/site.ts` | The site name, description and header links. |
 
-Leave the rest of `src/` and `starter-release.json` alone. Thally upgrades
-those with `npm run starter:update`, and your edits would conflict.
+Leave the rest of `src/` and `starter-release.json` alone. Thally updates those
+files with `npm run starter:update`, and your edits would conflict with it.
 
-## 2. Keep secrets out of Git
+## Step 2: Keep your API key out of Git
 
-Do this before you touch anything else. The scaffold creates two files with
-the same 133 lines of commented settings:
+You'll call the API many times while writing, so the key needs a safe home
+before anything else.
 
-- `.env.example`, which is **committed** and meant as a template.
-- `.env.local`, which is **ignored by Git** and where secrets go.
+### Know which env file is which
 
-They look identical in an editor, and my API key ended up in the wrong one. I
-caught it with `git diff` before committing. Check before every commit:
+The scaffold creates two files that start with the same 133 lines:
 
-```bash
-git diff --cached | grep -E 'past_sk_|sk-|api[_-]?key' && echo "STOP: secret staged"
-```
+- `.env.example` is committed to Git. It's a template for other people.
+- `.env.local` is ignored by Git. Secrets go here.
 
-Then put your key in `.env.local` and nowhere else:
+They look identical in an editor. My key ended up in `.env.example`, and I only
+caught it in `git diff` before committing.
+
+### Add the key without it touching your screen
 
 ```bash
 read -s "k?API key: " && echo "PAST_API_KEY=$k" >> .env.local && unset k
 ```
 
-`read -s` keeps the key off your screen and out of your shell history. The
-`"k?prompt"` form is zsh. In bash, use `read -s -p "API key: " k`.
+`read -s` hides what you paste and keeps it out of your shell history. This is
+zsh syntax, the macOS default. In bash, use `read -s -p "API key: " k`.
 
-## 3. Clear out the starter
+### Check before every commit
 
-The starter has eight placeholder pages and a sample "Posts" API. Delete what
-you won't use, and remove the same pages from `docs.json` in the same change:
+```bash
+git diff --cached | grep -E 'past_sk_' && echo "STOP: key staged"
+```
+
+Swap `past_sk_` for your API's key prefix. No output means nothing secret is
+staged.
+
+## Step 3: Replace the starter with your structure
+
+The starter has eight placeholder pages and a sample API. You'll replace them
+with pages that each do one job.
+
+### Pick a content type for every page
+
+GitHub's [content model](https://docs.github.com/en/contributing/style-guide-and-content-model/about-the-content-model)
+and Mintlify's [content types guide](https://www.mintlify.com/docs/guides/content-types)
+agree on four kinds of page. Decide which kind each page is before you write
+it:
+
+| Page on this site | Type | Its one job |
+| --- | --- | --- |
+| [Quickstart](/quickstart) | Quickstart | A first result in about 5 minutes and under 600 words |
+| [Track facts that change](/tutorials/track-facts-that-change) | Tutorial | One complete, real workflow from start to finish |
+| [Scope memory per customer](/guides/scope-memory-per-customer) | How-to | One task, named in the title |
+| [How past.dev decides what's true](/concepts/how-memory-works) | Explanation | Why it works the way it does, with no steps |
+| [Known issues](/known-issues) | Reference | Surprising behavior, what it breaks, what to do |
+
+A page that tries to do two of these jobs gets long and hard to follow. My
+first quickstart taught the API and explained its model at the same time. It
+ran to 1,153 words, about twice GitHub's limit, until I split it into the
+quickstart and the tutorial.
+
+### Delete the starter pages
 
 ```bash
 git rm src/content/components.mdx src/content/customization.mdx \
   src/content/guides/*.mdx src/content/api/authentication.mdx openapi.yaml
 ```
 
-Set your identity in `src/data/site.ts`:
+### Set the site's identity
+
+In `src/data/site.ts`, replace the `siteConfig` values and keep the generated
+`brand` fields:
 
 ```ts
 export const siteConfig: SiteConfig = {
   name: 'past.dev field guide',
-  description: 'An unofficial, example-first guide to the past.dev memory API.',
+  description:
+    'An unofficial, example-first guide to the past.dev memory API: send dated facts, recall what is true now, and scope memory per customer.',
   repoUrl: 'https://github.com/reetbatra/past-dev-field-guide',
   links: [
     { label: 'Official past.dev docs', href: 'https://past.dev/docs/memory-api/overview' },
   ],
-  // brand, brandPreset and brandPresets stay as generated
+  brand: brandPresets[brandPreset],
+  brandPreset,
+  brandPresets,
 }
 ```
 
 If you're documenting someone else's product, say so on the first page and
-link to their official docs. Don't use their logo. This site has an
-"unofficial guide" note on its introduction and its own clock mark.
+link to their official docs. Don't use their logo.
 
-## 4. Run the API before you write about it
+### Lay out the navigation by type
 
-I didn't write a single example until I'd run it. For past.dev that meant
-sending three dated notes, waiting for them to process, and recalling. It
-turned up three things the docs needed to say that I wouldn't have guessed:
-
-- Processing a note took anywhere from **1 to 8 minutes**. A quickstart that
-  says "now recall" right after sending would fail for most readers.
-- Moving a note into an audience took effect in **under three seconds** and
-  cost nothing, which made the "fix the leak" step possible.
-- The API **accepted a misspelled field** (`audiance`) without an error, so a
-  typo silently leaves data readable by everyone. That became a warning in the
-  guide.
-
-I kept a small shell helper that reads the key from `.env.local` and calls the
-API, then pasted the commands into the pages only after they worked. After
-writing each page, I ran its commands again, exactly as printed, and replaced
-the sample output with what came back.
-
-## 5. Write the pages
-
-Thally pages are MDX with built-in components. I used:
-
-- `<Steps>` and `<Step title="...">` for the quickstart and the guide.
-- `<Note type="warning" title="...">` and `<Tip>` for asides.
-- `<Card>` and `<CardGroup cols="2">` for next steps.
-- `<Hero>` on the introduction, which has `mode: home` in its frontmatter.
-
-Then lay out the navigation in `docs.json`. Each string in `pages` is a path
-under `src/content/` without `.mdx`:
+In `docs.json`, group the pages by the types you picked. Each string in `pages`
+is a path under `src/content/` without `.mdx`:
 
 ```json
 "tabs": [
@@ -134,7 +151,10 @@ under `src/content/` without `.mdx`:
     "tab": "Get started",
     "groups": [
       { "group": "Get started", "pages": ["introduction", "quickstart"] },
-      { "group": "Guides", "pages": ["guides/scope-memory-per-customer"] }
+      { "group": "Concepts", "pages": ["concepts/how-memory-works"] },
+      { "group": "Tutorials", "pages": ["tutorials/track-facts-that-change"] },
+      { "group": "How-to guides", "pages": ["guides/scope-memory-per-customer"] },
+      { "group": "Reference", "pages": ["known-issues"] }
     ]
   },
   {
@@ -146,41 +166,129 @@ under `src/content/` without `.mdx`:
 ]
 ```
 
-Run Thally's checker after each page:
+The complete file is
+[docs.json in the repo](https://github.com/reetbatra/past-dev-field-guide/blob/main/docs.json).
+
+## Step 4: Run every request before you write about it
+
+Write each page from requests you've actually sent, and paste the real
+responses. A reader who runs your example and gets different output stops
+trusting the rest of the page.
+
+### Keep a helper that reads the key for you
+
+This script reads the key from `.env.local`, so it never appears in a command
+you type:
+
+```bash
+#!/usr/bin/env bash
+# call.sh: call the API with the key from .env.local. Usage: ./call.sh GET /usage
+set -euo pipefail
+KEY=$(grep '^PAST_API_KEY=' .env.local | cut -d= -f2-)
+curl -sS -X "$1" "https://api.past.dev/api/v1$2" \
+  -H "Authorization: Bearer $KEY" -H 'Content-Type: application/json' \
+  ${3:+-d "$3"} -w '\nHTTP %{http_code}\n'
+```
+
+Add `call.sh` to `.gitignore` if it lives inside the repo.
+
+### Write down what surprised you
+
+Running the API turned up four things I wouldn't have guessed. Each changed a
+page:
+
+- Processing took from 20 seconds to 8 minutes. So every script waits for
+  `completed` before it asks a question.
+- A field named `audiance` was accepted without an error. That became a
+  warning in the how-to guide and an entry in [known issues](/known-issues).
+- An invalid timestamp returned a `400` with no body at all. That went in the
+  troubleshooting table.
+- The same notes gave different extracted facts on different runs. So every
+  page says "something like this" above its output.
+
+### Run the page, not your notes
+
+After writing a page, run its commands again exactly as printed, then replace
+the output with what came back. This caught sample output in the how-to guide
+that I had trimmed by hand, so it no longer matched what the command prints.
+
+For code in several languages, save each version as a file, run all of them,
+and paste them into the page from the files. This site's quickstart scripts
+print identical output in curl, TypeScript and Python.
+
+## Step 5: Write the pages
+
+Thally pages are MDX with built-in components. This site uses:
+
+- `<Steps>` and `<Step title="...">` for numbered procedures.
+- `<CodeGroup>` for the same code in several languages. The word after the
+  language becomes the menu label, as in `` ```typescript TypeScript ``. Use
+  the same labels in every group on a page, and a reader's choice carries
+  across all of them.
+- `<AgentPrompt title="...">` for a prompt readers can copy into a coding
+  agent. The quickstart has one.
+- `<Note type="warning" title="...">` for anything that can lose data or
+  leak it.
+- `<Card>` and `<CardGroup cols="2">` for next steps.
+
+Keep sentences under 25 words and paragraphs to two to four sentences, as
+Mintlify's [style guide](https://www.mintlify.com/docs/guides/style-and-tone)
+recommends. End every quickstart and tutorial with two or three next steps.
+
+### Check as you go
 
 ```bash
 npm run check -- --ci
 ```
 
-A broken internal link fails the check. A missing description, a page left
-out of `docs.json`, or a near-empty page comes back as a warning. It caught my
-changelog when I dropped its tab.
+A broken link fails the check. A broken `#anchor`, a missing description, or a
+page left out of `docs.json` comes back as a warning. It caught three anchor
+links on this site. Thally turns any run of punctuation in a heading into one
+hyphen, so `past.dev` becomes `past-dev` and `doesn't` becomes `doesn-t`.
 
-## 6. Generate the reference from the API's own spec
+## Step 6: Generate the API reference
 
 `"api": { "source": "openapi.json" }` turns every operation in the file into a
-page with a **Try it** panel. The panel sends requests through a relay on your
-docs server, so the API doesn't need CORS headers.
+page with a **Try it** panel. Requests go through a relay on your docs server,
+so the API doesn't need to allow your domain.
 
-past.dev's spec has 34 operations, including organization management and
-request tracing that this guide doesn't cover. You have two ways to show only
-the ones you want:
+### Keep only the endpoints your guide covers
 
-- **Hide them in `docs.json`.** Add an `overrides` entry per operation, keyed
-  by `METHOD /path`, with `"hidden": true`. The spec file stays exactly as
-  published.
-- **Filter the file.** I wrote
-  [`scripts/sync-past-openapi.ts`](https://github.com/reetbatra/past-dev-field-guide/blob/main/scripts/sync-past-openapi.ts),
-  which downloads the spec, keeps 16 operations unchanged, and fails if past.dev
-  removes one of them. `npm run openapi:sync` refreshes it.
+past.dev's spec has 34 operations, including account management this guide
+doesn't cover. [`scripts/sync-past-openapi.ts`](https://github.com/reetbatra/past-dev-field-guide/blob/main/scripts/sync-past-openapi.ts)
+downloads the spec and keeps 16 operations unchanged. It also fails if past.dev
+removes one of them, so the reference can't quietly keep a dead endpoint.
 
-I picked the script because it fails if past.dev renames or removes an
-endpoint the guide relies on. With overrides, a renamed endpoint would just
-appear in the sidebar without anyone noticing.
+```bash
+npm run openapi:sync
+```
 
-## 7. Add your logo
+```text
+openapi.json: 16 operations from https://past.dev/openapi.json (version 1.0.0)
+```
 
-Set the logo and favicon in `docs.json`. The files go in `public/`:
+### Order the sidebar the way people use the API
+
+By default, Thally groups endpoints by the spec's tags, in alphabetical order.
+past.dev's tags put audiences first and recall last. Set `api.groups` in
+`docs.json` to choose the order. Each page entry is an operation key:
+
+```json
+"api": {
+  "source": "openapi.json",
+  "groups": [
+    {
+      "group": "Send memory",
+      "pages": ["POST /api/v1/ingest", "POST /api/v1/ingest/batch", "GET /api/v1/ingest/{ingestionId}", "DELETE /api/v1/ingest/{ingestionId}"]
+    },
+    { "group": "Recall", "pages": ["POST /api/v1/recall"] }
+  ]
+}
+```
+
+## Step 7: Brand the site
+
+Put the logo and favicon in `public/`, and point to them from `docs.json`:
 
 ```json
 "navbar": {
@@ -197,82 +305,63 @@ Set the logo and favicon in `docs.json`. The files go in `public/`:
 }
 ```
 
-Keep the logo at most **160 pixels wide at 28 high**. Thally scales wider
-logos down, and my first one, at 196 pixels, came out with unreadable text.
+Make the logo 28 pixels high and no more than 160 wide. Thally shrinks wider
+logos to fit, and my first one, at 196 pixels, came out unreadable.
 
-## 8. Publish
+## Step 8: Publish on Vercel
 
-Build locally first:
+### Build locally first
 
 ```bash
 npm run typecheck
 npm run build
 ```
 
-Then push and deploy. I used Vercel:
+If both pass here, the build passes on Vercel.
+
+### Push and deploy
 
 ```bash
 gh repo create past-dev-field-guide --public --source . --push
-npx vercel --prod
+vercel link --yes --project past-dev-field-guide
+vercel --prod --yes
 ```
 
-Vercel detects Next.js. A public site needs no environment variables: Thally
-reads the production URL from Vercel for canonical links and social cards. Set
-`THALLY_SITE_URL` only for a custom domain. Don't add your API key to Vercel.
-The site never calls the API itself; readers' **Try it** requests carry their
-own keys.
+`vercel link` connects the GitHub repo, so every later push to `main` deploys
+on its own. The site needs no environment variables. Don't add your API key to
+Vercel: the site never calls the API itself, and readers' **Try it** requests
+carry their own keys.
 
-<Tip>
-  Thally also runs a managed host, Thally Cloud. Create the site at
-  [app.thally.io](https://app.thally.io), connect the repo through its GitHub
-  App, and it publishes on each push. You need it for the AI answers widget,
-  which only works on a Cloud-linked site.
-</Tip>
+`vercel link` also writes a `VERCEL_OIDC_TOKEN` line into `.env.local`. It
+leaves your other lines alone.
 
-## Snags I hit, and the fixes
+## Troubleshooting
 
-**My lowercase name got capitalized.** I named the site `past.dev field
-guide` and the header showed "Past.dev field guide". Thally's
-`displaySiteName` uppercases the first letter of every site name, and nothing
-turns that off. The fix was a wordmark SVG with `showTitle: false`, so the name
-is never rendered as text. Plan for this if your brand starts lowercase.
+- **The header shows your name with a capital letter you didn't type.** Thally
+  capitalizes the first letter of every site name, so "past.dev" showed as
+  "Past.dev". Use a wordmark logo with `showTitle: false`, as in step 7.
+- **You can't find where the logo goes.** It's `navbar.logo` in `docs.json`,
+  documented in Thally's [branding guide](https://docs.thally.io/guides/branding-and-theming).
+  Neither starter file mentions it.
+- **Try it shows several identical "Authorization" fields.** The spec lists more
+  than one way to authenticate, and Thally shows one field per method. Tell
+  readers which one to fill, as this site's [API overview](/api/introduction) does.
+- **The local site doesn't change after a rebuild.** An old `npm run start` may
+  still hold port 3040, so the new one fails to start. Run
+  `kill $(lsof -ti tcp:3040)`, then start again.
 
-**I couldn't find where the logo goes.** Nothing in the starter's `site.ts` or
-`docs.json` mentions a logo, and the default leaf is wired into the header
-component. It's in Thally's
-[branding guide](https://docs.thally.io/guides/branding-and-theming) as
-`navbar.logo`. Read that guide before you search `src/` like I did.
+## Conclusion
 
-**The Try it panel keeps readers' keys.** It stores what a reader types in the
-browser tab's session storage until the tab closes, and requests pass through
-your docs server. That's reasonable, but Thally's API reference guide doesn't
-say so. Tell your readers. The [API overview](/api/introduction) here does.
+You built a docs site for a real API: a quickstart in three languages, a
+tutorial, a how-to guide, a concepts page, a known-issues page, and a reference
+generated from the API's own spec. Every response on it came from a real
+request, the same way the past.dev field guide was built.
 
-**Three identical key fields.** past.dev's spec lists three ways to
-authenticate: a project key, a management key and an agent token. Thally's
-**Try it** panel shows one field per scheme, and all three are labeled
-"Authorization, Bearer token". Only the small hint under each tells them
-apart. I couldn't fix that from the docs side, so the
-[API overview](/api/introduction) tells readers which field to use.
-
-**The reference sidebar followed the API's tags.** past.dev tags its endpoints
-in lowercase (`audiences`, `debugging`, `identities`), and Thally lists them
-alphabetically, so audiences came before recall. Setting `api.groups` in
-`docs.json` replaces the tag groups with your own order. Each page entry is
-an operation key such as `"POST /api/v1/recall"`.
-
-**I kept seeing an old build.** I restarted `npm run start` after a rebuild,
-but the old server still held port 3040. The new one failed with
-`EADDRINUSE` in the background. Free the port first:
-
-```bash
-kill $(lsof -ti tcp:3040)
-npm run start
-```
-
-## What to do next
+## Next steps
 
 - Write your quickstart around the API's most surprising behavior, not its
-  first endpoint. For past.dev that's "it knows when a fact changed".
-- Re-run every command on the site before each publish. APIs change, and the
-  output on a docs page goes stale without anyone noticing.
+  first endpoint. For past.dev, that's knowing when a fact changed.
+- Run your test scripts on a schedule in CI, so you hear about an API change
+  before a reader does.
+- Read GitHub's [templates](https://docs.github.com/en/contributing/writing-for-github-docs/templates)
+  for the quickstart and tutorial page structures this site follows.

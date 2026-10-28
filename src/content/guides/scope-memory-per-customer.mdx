@@ -13,8 +13,10 @@ ask the same question as three different people. You'll also hit, and fix, the
 mistake that leaks data between customers.
 
 You need the API key and the `curl` and `jq` setup from the
-[quickstart](/quickstart). Doing the quickstart first helps, because its notes
-show up in this guide's results.
+[quickstart](/quickstart). Do the quickstart and
+[Track facts that change](/tutorials/track-facts-that-change) first. Their
+notes show up in this guide's results, and one of them causes the leak you'll
+fix.
 
 ## How it fits together
 
@@ -142,8 +144,8 @@ show up in this guide's results.
     three see the status update.
 
     But look at lines 4 and 6 for Leo. **A Contoso user can read Northwind's
-    support ticket.** That ticket came from the quickstart, which sent it without an
-    audience, so it went to the `project` audience that everyone can read.
+    support ticket.** That ticket came from Track facts that change, which sent it
+    without an audience, so it went to the `project` audience that everyone can read.
   </Step>
   <Step title="Fix the leak">
     Resend the ticket with the same `id`, the same content and timestamp, and
@@ -180,7 +182,7 @@ show up in this guide's results.
     run, and Maya still sees the ticket.
 
     Do the same for `northwind-kickoff` and `northwind-upgrade` from the
-    quickstart.
+    quickstart. Any note sent without an audience has the same problem.
   </Step>
 </Steps>
 
@@ -230,11 +232,9 @@ Every error past.dev returns has the same shape. Match on `code`:
 | Another customer's facts in results | The data point was sent without `audience`. | Resend it with `audience` (step 5). |
 | `results` is empty | The data point is still processing, or the identity can't read it. | Check its status, then check the identity's traits match the audience rule. |
 
-<Note type="info" title="Unknown fields are accepted">
-  The API reference says ingest refuses unknown fields, but when I sent a
-  `tags` field it returned `202` and stored the data point anyway. Check field
-  names carefully: a typo like `audiance` won't fail, and the data point will be
-  readable by everyone.
+<Note type="warning" title="A misspelled audience fails silently">
+  past.dev accepts fields it doesn't recognize, so `"audiance"` stores the data
+  point with no audience. See [known issues](/known-issues#ingest-accepts-fields-it-doesn-t-know).
 </Note>
 
 ## Next step

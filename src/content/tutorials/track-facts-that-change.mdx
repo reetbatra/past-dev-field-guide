@@ -1,0 +1,162 @@
+---
+title: Track facts that change
+description: Add a third note to the quickstart's customer, ask what was true on a past date, and write notes so past.dev can tell which value replaced which.
+---
+
+This page is for developers who finished the [quickstart](/quickstart) and want
+their agent to handle history, not just the latest value. You'll keep working
+with Northwind Traders, the customer who moved from the Starter plan to Growth.
+
+By the end, you'll ask past.dev the same question twice and get two correct
+answers. Asked about today, it says Growth with 20 seats. Asked about March 1,
+it says Starter with 5 seats, because the upgrade hadn't happened yet:
+
+```text
+2026-03-01T00:00:00Z
+1. [observation] Northwind Traders signed up for the Starter plan (action).
+2. [source] Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support.
+3. [claim] Starter plan seat count: 5 seats (exactly).
+```
+
+You need the quickstart's two notes in your project, `PAST_API_KEY` exported,
+and `curl` with `jq`. Every command here runs in the same terminal.
+
+## Step 1: Add a note from later in the year
+
+A support ticket arrives in June. Send it with its real date in `timestamp`.
+past.dev orders facts by that date, not by when you send them.
+
+```bash
+curl -sS https://api.past.dev/api/v1/ingest \
+  -H "Authorization: Bearer $PAST_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"id":"northwind-sso-ticket","label":"Support ticket","timestamp":"2026-06-10T14:15:00Z",
+       "content":"Support ticket from Northwind Traders: SSO login fails for users on their EU domain. Priya Shah asked for a fix before their July security audit."}' \
+  | jq -r '"\(.sourceId): \(.status)  ingestionId=\(.ingestionId)"'
+```
+
+```text
+northwind-sso-ticket: queued  ingestionId=ba835dc5-eb9a-4b22-b516-15fcc4167767
+```
+
+Check on it with the `ingestionId` until `status` is `completed`:
+
+```bash
+curl -sS https://api.past.dev/api/v1/ingest/ba835dc5-eb9a-4b22-b516-15fcc4167767 \
+  -H "Authorization: Bearer $PAST_API_KEY" | jq -c '{status, settled}'
+```
+
+```json
+{"status":"completed","settled":true}
+```
+
+This note took 8 minutes to process in my run, the slowest I saw. Most took
+under a minute.
+
+## Step 2: Ask what's true now
+
+Ask for eight results this time, and print the date each old value was
+replaced:
+
+```bash
+curl -sS https://api.past.dev/api/v1/recall \
+  -H "Authorization: Bearer $PAST_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"What plan is Northwind Traders on, and how many seats do they have?",
+       "identity":"support-agent","limit":8}' \
+  | jq -r '.results[] | "\(.rank). [\(.artifact.kind)] \(.content)\(if .artifact.supersededAt then "  (replaced \(.artifact.supersededAt[0:10]))" else "" end)"'
+```
+
+```text
+1. [source] Email from Priya Shah at Northwind Traders: we have upgraded from the Starter plan to the Growth plan and now have 20 seats, effective today.
+2. [claim] Priya Shah: Northwind Traders seats: 20 seats (exactly). Effective from 2026-04-02.
+3. [source] Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support.
+4. [observation] Northwind Traders signed up for the Starter plan (action).  (replaced 2026-04-02)
+5. [claim] Priya Shah: Northwind Traders plan: Starter plan. Effective until 2026-04-01.
+6. [observation] Priya Shah: Northwind Traders upgraded from the Starter plan to the Growth plan (transition).
+7. [claim] Priya Shah: Northwind Traders plan: Growth plan. Effective from 2026-04-02.
+8. [temporal-anchor] Priya Shah: Northwind Traders upgraded to the Growth plan (when): today. Resolved to 2026-04-02.
+```
+
+The upgrade ranks first, and the January sign-up is marked as replaced. The
+June ticket doesn't appear, because it says nothing about plans or seats.
+
+## Step 3: Ask what was true in March
+
+Add `queryTimestamp`. past.dev then answers as if nothing after that moment
+had happened:
+
+```bash
+curl -sS https://api.past.dev/api/v1/recall \
+  -H "Authorization: Bearer $PAST_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{"query":"What plan is Northwind Traders on, and how many seats do they have?",
+       "identity":"support-agent","limit":5,"queryTimestamp":"2026-03-01T00:00:00Z"}' \
+  | jq -r '.asOf, (.results[] | "\(.rank). [\(.artifact.kind)] \(.content)")'
+```
+
+```text
+2026-03-01T00:00:00Z
+1. [observation] Northwind Traders signed up for the Starter plan (action).
+2. [source] Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support.
+3. [claim] Starter plan seat count: 5 seats (exactly).
+4. [claim] Northwind Traders main contact: Priya Shah.
+5. [mention] Mentioned an event: Kickoff call.
+```
+
+`asOf` echoes the date you asked about. Only January's facts come back, and
+none is marked as replaced, because on March 1 nothing had replaced them yet.
+
+Use this when your agent needs to explain a past decision, such as "why did we
+bill them for 5 seats in February?"
+
+## Step 4: Write notes past.dev can link
+
+Look at the seat counts in step 2 and step 3. past.dev stored January's as
+`Starter plan seat count` and April's as `Northwind Traders seats`. To past.dev
+those are two different properties, so it never marked the 5-seat claim as
+replaced.
+
+Your run may have linked them. The run shown in the [quickstart](/quickstart)
+did, on identical notes. Whether two facts get linked depends on how a model
+words them, and the wording changes from run to run.
+
+It links an old value to a new one only when both describe the same property.
+Two habits make a match more likely:
+
+- **Name the subject the same way every time.** Write "Northwind Traders" in
+  every note, not "Northwind" in one and "the customer" in the next.
+- **State the property in the same words.** "Northwind Traders has 20 seats" in
+  April pairs with "Northwind Traders has 5 seats" from January.
+
+Some notes will still come out worded differently, because a model extracts
+the facts. So don't treat a missing `supersededAt` as proof a value is still
+current. Give your model every result with its date, in rank order, and tell it
+to prefer the newest evidence.
+
+## Troubleshooting
+
+- **`results` is empty.** A note is still processing. Check its status as in
+  step 1.
+- **Facts come back in the wrong order.** A note was sent without `timestamp`,
+  so past.dev dated it to the moment you sent it. Resend it with the same `id`
+  and its real date.
+- **An old value isn't marked as replaced.** The two notes describe it in
+  different words. See step 4.
+- **A `400` with an empty body.** The `timestamp` isn't ISO 8601. Use the form
+  `2026-06-10T14:15:00Z`. This is listed under [known issues](/known-issues).
+
+## Conclusion
+
+You gave Northwind Traders a third note and asked about them at two points in
+time. Today they're on Growth with 20 seats. On March 1 they were on Starter
+with 5. You also saw why one old value wasn't marked as replaced, and how to
+word notes so it is.
+
+## Next steps
+
+- [Scope memory per customer](/guides/scope-memory-per-customer): stop Contoso's
+  users from reading Northwind's ticket.
+- [How past.dev decides what's true](/concepts/how-memory-works): the model
+  behind ranks, kinds and `supersededAt`.
+- [Known issues](/known-issues): behavior that surprised me while testing.

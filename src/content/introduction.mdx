@@ -7,10 +7,10 @@ mode: home
 <Hero
   title="Memory for agents that knows when facts change"
   subtitle="Send past.dev the notes, emails and tickets your agent should remember. Ask it a question and you get ranked, dated evidence, with old values marked as replaced."
-  primaryLabel="Give your agent a memory"
+  primaryLabel="Start the quickstart"
   primaryHref="/quickstart"
-  secondaryLabel="Scope memory per customer"
-  secondaryHref="/guides/scope-memory-per-customer"
+  secondaryLabel="How it works"
+  secondaryHref="/concepts/how-memory-works"
 />
 
 <Note type="info" title="An unofficial guide">
@@ -20,72 +20,28 @@ mode: home
   win if the two ever disagree.
 </Note>
 
-## What it does
+past.dev stores what your agent should remember, with the date each fact
+happened. When a newer fact replaces an older one, answers lead with the new
+value and mark the old one with the date it changed. It also controls which
+users can read which facts, so one project can serve many customers.
 
-Most agent memory is a vector search over chunks of text. Ask "what plan is
-this customer on?" and you get every chunk that mentions a plan, with no sign
-of which one is current.
-
-past.dev keeps the dates. You send each fact with the time it happened. When a
-later fact replaces an earlier one, the answer leads with the new value and
-marks the old one with the date it was replaced. You can also ask what was true
-on any past date.
-
-It also controls who sees what. Each reader asks as an **identity**, and each
-fact can be limited to an **audience**. One project can hold memory for many
-customers without one customer's facts showing up in another's answers.
-
-## Who it's for
+This guide is for developers adding memory to an agent with past.dev's REST
+API. Pick where to start:
 
 <CardGroup cols="2">
-  <Card title="Building an agent that needs memory" icon="party-horn" href="/quickstart">
-    Send three dated notes and get back the current answer and the history in about ten minutes.
+  <Card title="Quickstart" icon="party-horn" href="/quickstart">
+    Send two dated notes and ask what's true now. One script, in curl, TypeScript or Python.
   </Card>
-  <Card title="Serving many customers from one agent" icon="grid-round" href="/guides/scope-memory-per-customer">
+  <Card title="Track facts that change" icon="clock" href="/tutorials/track-facts-that-change">
+    Ask what was true on a past date, and write notes past.dev can link.
+  </Card>
+  <Card title="Scope memory per customer" icon="grid-round" href="/guides/scope-memory-per-customer">
     Keep each customer's facts out of every other customer's answers.
+  </Card>
+  <Card title="How past.dev decides what's true" icon="lightbulb" href="/concepts/how-memory-works">
+    Data points, memories, replacement, time, identities and audiences.
   </Card>
 </CardGroup>
 
-## The four things to know
-
-| Concept | What it is | Where you set it |
-| --- | --- | --- |
-| **Project** | The boundary. Nothing crosses between projects. Your API key picks the project, so request bodies never name it. | The console, when you create a key |
-| **Data point** | One dated piece of text: a call note, an email, a ticket. Its `id` is yours, and resending the same `id` replaces it. | `POST /ingest` |
-| **Identity** | The reader a recall answers as, such as a user or an agent. It can carry traits like `company: northwind`. | `identity` on `POST /recall` |
-| **Audience** | Who may read a data point. Leave it out and every identity in the project can read it. | `audience` on `POST /ingest` |
-
-## What a recall returns
-
-You send a question and an identity. You get back ranked documents, each with
-the date it happened. Some are your data points as you sent them. The rest are
-**memories**, short statements past.dev extracted from them. `artifact.kind`
-says which:
-
-| `kind` | Example from the [quickstart](/quickstart) |
-| --- | --- |
-| `source` | Your original email, word for word |
-| `claim` | `Northwind Traders plan: Growth plan. Effective from 2026-04-02.` |
-| `observation` | `Northwind Traders signed up for the Starter plan (action).` |
-| `temporal-anchor` | `upgraded to the Growth plan (when): today. Resolved to 2026-04-02.` |
-| `mention` | `Raised an issue: SSO login failure on EU domain.` |
-
-A memory that a later fact replaced carries `artifact.supersededAt`, the date it
-stopped being true. Pass the results to your model in rank order and cite
-`sources[].sourceId` when it answers.
-
-## Costs and limits
-
-- **Sending** costs 1 credit per 350 bytes of text, at least 1 per data point.
-- **Recalling** costs 0.1 credit.
-- **New accounts** get 150,000 free credits, or 400,000 with a work email. No card needed.
-- **Processing isn't instant.** A data point is readable once its status is
-  `completed`. In my runs that took between 1 and 8 minutes.
-
-Building and testing everything in this guide, with every command run at least twice, used **under 10 credits**.
-
-## Next step
-
-<Card title="Give your agent a memory" icon="party-horn" href="/quickstart">
-  Send three dated notes, then ask what's true now and what was true in March.
-</Card>
+Building and testing everything in this guide, with every command run at
+least twice, used under 20 of the 150,000 free credits.

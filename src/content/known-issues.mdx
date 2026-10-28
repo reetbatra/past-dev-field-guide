@@ -1,0 +1,70 @@
+---
+title: Known issues for past.dev
+navTitle: Known issues
+description: past.dev behavior that surprised me while writing this guide, with what happens, why it matters, and what to do about it.
+---
+
+I found these while testing every request in this guide against
+`api.past.dev`, contract version 1.0.0, on October 28, 2026. Some are bugs,
+and some are expected behavior that's easy to trip over. past.dev may have
+changed since. If you hit one that's gone, the
+[official docs](https://past.dev/docs/memory-api/overview) win.
+
+## Ingest accepts fields it doesn't know
+
+**What happens:** The API reference says `POST /ingest` refuses unknown fields
+(`additionalProperties: false`). It doesn't. A request with an extra `tags`
+field returned `202` and stored the data point.
+
+**Why it matters:** A typo in a real field fails silently. Sending
+`"audiance": "northwind"` instead of `"audience"` stores the data point with no
+audience, which makes it readable by every identity in the project.
+
+**What to do:** Build request bodies from a typed object or a schema check in
+your own code, so a misspelled field fails before it's sent.
+
+## An invalid timestamp returns an empty error
+
+**What happens:** Sending `"timestamp": "last tuesday"` returns `400` with an
+empty body. Every other error I triggered returned a JSON body with a `code`.
+
+**Why it matters:** Code that reads `code` from every error, as the
+[API overview](/api/introduction#errors) suggests, gets nothing to branch on.
+
+**What to do:** Format timestamps as ISO 8601 (`2026-06-10T14:15:00Z`) before
+sending. Treat a `400` with an empty body as a bad timestamp.
+
+## An invalid level comes back without a message
+
+**What happens:** `recall-level-invalid` returns an empty `debugMessage`.
+Other errors explain themselves, such as `identity-required`.
+
+**What to do:** `level` must be `low`, `medium`, `high` or `extra-high`, or
+left out.
+
+## An old value isn't always marked as replaced
+
+**What happens:** In the data behind [Track facts that change](/tutorials/track-facts-that-change),
+past.dev linked the old and new plan, but stored the seat counts as two
+properties (`Starter plan seat count` and `Northwind Traders seats`). The
+5-seat claim never got `supersededAt`. A later run on the same notes linked
+them correctly, so it varies between runs.
+
+**Why it matters:** Code that treats "no `supersededAt`" as "still true" will
+show stale values.
+
+**What to do:** Give your model all results with their dates, newest first.
+Word notes consistently. [Track facts that change](/tutorials/track-facts-that-change#step-4-write-notes-past-dev-can-link)
+covers both. This is how extraction works, not a bug.
+
+## Processing time varies widely
+
+**What happens:** The same kind of short note took anywhere from 20 seconds to
+8 minutes to reach `completed`.
+
+**Why it matters:** A data point isn't in recall results until it's processed.
+Code that sends and recalls right away gets nothing back.
+
+**What to do:** Poll `GET /ingest/{ingestionId}` until `status` is
+`completed`, as the [quickstart](/quickstart) scripts do. This is expected
+behavior, not a bug.

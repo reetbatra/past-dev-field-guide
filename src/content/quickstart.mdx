@@ -1,181 +1,251 @@
 ---
-title: Give your agent a memory
+title: "Quickstart: remember a fact that changes"
 navTitle: Quickstart
-description: Send three dated notes about a customer, then ask past.dev what's true now and what was true in March. About ten minutes, most of it waiting.
+description: Send two dated notes to past.dev and ask what's true now. One script, in curl, TypeScript or Python.
 ---
 
-A customer, Northwind Traders, signs up on the Starter plan in January,
-upgrades to Growth in April, and files a support ticket in June. You'll send
-those three notes to past.dev, then ask it the question a support agent would:
-**what plan are they on, and how many seats do they have?**
-
-You'll see past.dev return the April upgrade first and mark the January plan as
-replaced. Then you'll ask the same question as of March 1 and get the January
-answer instead.
-
-## Before you begin
+This quickstart is for developers who want to see past.dev work before they
+build with it. You'll send two notes about a customer whose plan changed, then
+ask past.dev what plan they're on. It answers with the new plan first and marks
+the old one as replaced.
 
 You need:
 
-- A past.dev account. [Sign up](https://sso.past.dev/sign-up) free. No card is
-  needed, and you start with 150,000 credits. This page uses about 3.
-- A project API key. In the [console](https://app.past.dev), open **API keys**
-  and create one. It starts with `past_sk_`.
-- `curl`, and `jq` 1.6 or later (`brew install jq` or `sudo apt-get install jq`).
+- A past.dev account. [Sign up](https://sso.past.dev/sign-up) free, with no
+  card. This quickstart uses about 3 of your 150,000 starting credits.
+- A project API key from the [console](https://app.past.dev), under **API keys**.
+- One of: `curl` with `jq`, Node.js 22.18 or later (it runs `.ts` files directly), or Python 3.9 or later. None
+  of the scripts needs a package install.
 
-Put the key in your shell, not in your code:
+<AgentPrompt heading="Using a coding agent?" title="Copy this prompt and it can add past.dev memory to your project.">
+Add long-term memory to this project with the past.dev REST API.
+
+- Base URL: https://api.past.dev/api/v1. Authenticate with the header `Authorization: Bearer $PAST_API_KEY`. Read the key from the environment and never write it into code.
+- Send facts with `POST /ingest` (one) or `POST /ingest/batch` (`{"items": [...]}`, up to 1,000). Give each item a stable `id`, the text in `content`, and `timestamp` set to when the fact happened, in ISO 8601.
+- Processing is asynchronous. Poll `GET /ingest/{ingestionId}` until `status` is `completed`. Stop with an error if it is `failed`.
+- Ask with `POST /recall` and a body of `{"query": "...", "identity": "<the user's id>"}`. Pass `results` to the model in rank order. A result with `artifact.supersededAt` was replaced on that date. Cite `sources[].sourceId`.
+- Every error response has a `code` field. Surface it instead of retrying blindly.
+
+Official docs: https://past.dev/docs/memory-api/overview
+</AgentPrompt>
+
+## Set your API key
+
+Export the key in the terminal you'll run the script from:
 
 ```bash
 export PAST_API_KEY='past_sk_...'
 ```
 
-<Tip>
-  New accounts get one project, `default-project`, and your key already points
-  at it. Every request below goes to that project.
-</Tip>
+## Run the script
 
-<Steps>
-  <Step title="Send three dated notes">
-    Each note is one data point. `id` is yours to choose, and resending the same
-    `id` later replaces that note. `timestamp` is when it happened, not when you
-    send it. That's what lets past.dev order facts correctly.
+Save the version for your language as `quickstart.sh`, `quickstart.ts` or
+`quickstart.py`. It sends two notes in one batch, waits until past.dev has
+read them, then asks the question.
 
-    ```bash
-    send() {
-      curl -sS https://api.past.dev/api/v1/ingest \
-        -H "Authorization: Bearer $PAST_API_KEY" \
-        -H 'Content-Type: application/json' \
-        -d "$1" | jq -r '"\(.sourceId): \(.status)  ingestionId=\(.ingestionId)"'
-    }
+<CodeGroup>
+```bash curl
+#!/usr/bin/env bash
+set -euo pipefail
+API=https://api.past.dev/api/v1
+AUTH=(-H "Authorization: Bearer $PAST_API_KEY" -H "Content-Type: application/json")
 
-    send '{"id":"northwind-kickoff","label":"Call notes","timestamp":"2026-01-14T10:00:00Z",
-      "content":"Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support."}'
+# Fail with past.dev's own error code instead of a jq error.
+check() { jq -e 'has("code") | not' >/dev/null <<<"$1" || { echo "past.dev error: $1" >&2; exit 1; }; }
 
-    send '{"id":"northwind-upgrade","label":"Email","timestamp":"2026-04-02T09:30:00Z",
-      "content":"Email from Priya Shah at Northwind Traders: we have upgraded from the Starter plan to the Growth plan and now have 20 seats, effective today."}'
+# 1. Send two dated notes in one batch.
+sent=$(curl -sS "$API/ingest/batch" "${AUTH[@]}" -d '{"items": [
+  {"id": "northwind-kickoff", "label": "Call notes", "timestamp": "2026-01-14T10:00:00Z",
+   "content": "Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support."},
+  {"id": "northwind-upgrade", "label": "Email", "timestamp": "2026-04-02T09:30:00Z",
+   "content": "Email from Priya Shah at Northwind Traders: we have upgraded from the Starter plan to the Growth plan and now have 20 seats, effective today."}
+]}')
+check "$sent"
+ingestion=$(jq -r .ingestionId <<<"$sent")
+echo "Sent 2 notes"
 
-    send '{"id":"northwind-sso-ticket","label":"Support ticket","timestamp":"2026-06-10T14:15:00Z",
-      "content":"Support ticket from Northwind Traders: SSO login fails for users on their EU domain. Priya Shah asked for a fix before their July security audit."}'
-    ```
+# 2. Wait until past.dev has read them.
+while true; do
+  state=$(curl -sS "$API/ingest/$ingestion" "${AUTH[@]}")
+  check "$state"
+  case $(jq -r .status <<<"$state") in
+    completed) echo "Processed"; break ;;
+    failed) echo "Processing failed: $(jq -c .failure <<<"$state")" >&2; exit 1 ;;
+    *) echo "Processing..."; sleep 10 ;;
+  esac
+done
 
-    Each one returns `202` and is queued:
+# 3. Ask what's true now.
+answer=$(curl -sS "$API/recall" "${AUTH[@]}" -d '{"query": "What plan is Northwind Traders on, and how many seats do they have?",
+  "identity": "support-agent", "limit": 5}')
+check "$answer"
+jq -r '.results[] | "\(.rank). [\(.artifact.kind)] \(.content)" +
+  (if .artifact.supersededAt then " (replaced \(.artifact.supersededAt[0:10]))" else "" end)' <<<"$answer"
+```
 
-    ```text
-    northwind-kickoff: queued  ingestionId=5fe239a7-ccbf-4935-bcc7-6aa8ee24792a
-    northwind-upgrade: queued  ingestionId=0d87ce12-f247-4d6f-8e86-46c16fbc2996
-    northwind-sso-ticket: queued  ingestionId=ba835dc5-eb9a-4b22-b516-15fcc4167767
-    ```
+```typescript TypeScript
+const API = "https://api.past.dev/api/v1";
+const headers = {
+  Authorization: `Bearer ${process.env.PAST_API_KEY}`,
+  "Content-Type": "application/json",
+};
 
-    Running this again is safe. A note whose `id`, content, label and
-    timestamp haven't changed comes back `completed` right away, and you
-    aren't charged for it.
-  </Step>
-  <Step title="Wait until all three are processed">
-    past.dev reads each note in the background and pulls out the facts in it.
-    A note isn't in recall results until its status is `completed`. Check with
-    the `ingestionId` from step 1:
+// Every past.dev error carries a `code`. Fail with it instead of a TypeError.
+async function call(path: string, body?: unknown) {
+  const res = await fetch(API + path, {
+    method: body ? "POST" : "GET",
+    headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const json = await res.json();
+  if (!res.ok) throw new Error(`past.dev error: ${JSON.stringify(json)}`);
+  return json;
+}
 
-    ```bash
-    curl -sS https://api.past.dev/api/v1/ingest/INGESTION_ID \
-      -H "Authorization: Bearer $PAST_API_KEY" | jq -c '{status, settled}'
-    ```
+// 1. Send two dated notes in one batch.
+const sent = await call("/ingest/batch", {
+  items: [
+    {
+      id: "northwind-kickoff", label: "Call notes", timestamp: "2026-01-14T10:00:00Z",
+      content: "Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support.",
+    },
+    {
+      id: "northwind-upgrade", label: "Email", timestamp: "2026-04-02T09:30:00Z",
+      content: "Email from Priya Shah at Northwind Traders: we have upgraded from the Starter plan to the Growth plan and now have 20 seats, effective today.",
+    },
+  ],
+});
+console.log("Sent 2 notes");
 
-    ```json
-    {"status":"processing","settled":false}
-    ```
+// 2. Wait until past.dev has read them.
+while (true) {
+  const state = await call(`/ingest/${sent.ingestionId}`);
+  if (state.status === "completed") break;
+  if (state.status === "failed") throw new Error(`Processing failed: ${JSON.stringify(state.failure)}`);
+  console.log("Processing...");
+  await new Promise((resolve) => setTimeout(resolve, 10_000));
+}
+console.log("Processed");
 
-    Repeat until you see `"status":"completed"`. In my runs, a note took
-    anywhere from 1 to 8 minutes, so this is the slow part of the page.
+// 3. Ask what's true now.
+const answer = await call("/recall", {
+  query: "What plan is Northwind Traders on, and how many seats do they have?",
+  identity: "support-agent",
+  limit: 5,
+});
+for (const r of answer.results) {
+  const replaced = r.artifact.supersededAt ? ` (replaced ${r.artifact.supersededAt.slice(0, 10)})` : "";
+  console.log(`${r.rank}. [${r.artifact.kind}] ${r.content}${replaced}`);
+}
+```
 
-    `settled` turns `true` once nothing in the whole project is still
-    processing. When it's `true`, all three of your notes are done.
-  </Step>
-  <Step title="Ask what's true now">
-    A recall needs a question and an `identity`, the reader it answers as. The
-    notes were sent with no audience, so any identity can read them.
+```python Python
+import json, os, time, urllib.error, urllib.request
 
-    ```bash
-    curl -sS https://api.past.dev/api/v1/recall \
-      -H "Authorization: Bearer $PAST_API_KEY" \
-      -H 'Content-Type: application/json' \
-      -d '{"query":"What plan is Northwind Traders on, and how many seats do they have?",
-           "identity":"support-agent","limit":8}' \
-      | jq -r '.results[] | "\(.rank). [\(.artifact.kind)] \(.content)\(if .artifact.supersededAt then "  (replaced \(.artifact.supersededAt[0:10]))" else "" end)"'
-    ```
+API = "https://api.past.dev/api/v1"
+HEADERS = {
+    "Authorization": f"Bearer {os.environ['PAST_API_KEY']}",
+    "Content-Type": "application/json",
+}
 
-    This came back in about a second:
 
-    ```text
-    1. [source] Email from Priya Shah at Northwind Traders: we have upgraded from the Starter plan to the Growth plan and now have 20 seats, effective today.
-    2. [claim] Priya Shah: Northwind Traders seats: 20 seats (exactly). Effective from 2026-04-02.
-    3. [source] Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support.
-    4. [observation] Northwind Traders signed up for the Starter plan (action).  (replaced 2026-04-02)
-    5. [claim] Priya Shah: Northwind Traders plan: Starter plan. Effective until 2026-04-01.
-    6. [observation] Priya Shah: Northwind Traders upgraded from the Starter plan to the Growth plan (transition).
-    7. [claim] Priya Shah: Northwind Traders plan: Growth plan. Effective from 2026-04-02.
-    8. [temporal-anchor] Priya Shah: Northwind Traders upgraded to the Growth plan (when): today. Resolved to 2026-04-02.
-    ```
+def call(path, body=None):
+    data = json.dumps(body).encode() if body is not None else None
+    req = urllib.request.Request(API + path, data=data, headers=HEADERS)
+    try:
+        with urllib.request.urlopen(req) as res:
+            return json.load(res)
+    except urllib.error.HTTPError as err:
+        # Every past.dev error carries a `code`. Show it instead of a stack of urllib frames.
+        raise SystemExit(f"past.dev error: {err.read().decode()}")
 
-    The April email ranks first. The January sign-up is still there, because
-    it's true history, but it's marked as replaced on April 2. Notice line 8:
-    the email only said "effective today", and past.dev worked out that
-    "today" meant April 2 from the note's `timestamp`.
 
-    Your ranks and wording will differ a little. past.dev uses a model to pull
-    facts out of each note.
-  </Step>
-  <Step title="Ask what was true in March">
-    Add `queryTimestamp` to ask as of a past date. past.dev answers as if
-    nothing after that date had happened yet:
+# 1. Send two dated notes in one batch.
+sent = call("/ingest/batch", {"items": [
+    {"id": "northwind-kickoff", "label": "Call notes", "timestamp": "2026-01-14T10:00:00Z",
+     "content": "Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support."},
+    {"id": "northwind-upgrade", "label": "Email", "timestamp": "2026-04-02T09:30:00Z",
+     "content": "Email from Priya Shah at Northwind Traders: we have upgraded from the Starter plan to the Growth plan and now have 20 seats, effective today."},
+]})
+print("Sent 2 notes")
 
-    ```bash
-    curl -sS https://api.past.dev/api/v1/recall \
-      -H "Authorization: Bearer $PAST_API_KEY" \
-      -H 'Content-Type: application/json' \
-      -d '{"query":"What plan is Northwind Traders on, and how many seats do they have?",
-           "identity":"support-agent","limit":5,"queryTimestamp":"2026-03-01T00:00:00Z"}' \
-      | jq -r '.asOf, (.results[] | "\(.rank). [\(.artifact.kind)] \(.content)")'
-    ```
+# 2. Wait until past.dev has read them.
+while True:
+    state = call(f"/ingest/{sent['ingestionId']}")
+    if state["status"] == "completed":
+        break
+    if state["status"] == "failed":
+        raise SystemExit(f"Processing failed: {state['failure']}")
+    print("Processing...")
+    time.sleep(10)
+print("Processed")
 
-    ```text
-    2026-03-01T00:00:00Z
-    1. [observation] Northwind Traders signed up for the Starter plan (action).
-    2. [source] Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support.
-    3. [claim] Starter plan seat count: 5 seats (exactly).
-    4. [claim] Northwind Traders main contact: Priya Shah.
-    5. [mention] Mentioned an event: Kickoff call.
-    ```
+# 3. Ask what's true now.
+answer = call("/recall", {
+    "query": "What plan is Northwind Traders on, and how many seats do they have?",
+    "identity": "support-agent",
+    "limit": 5,
+})
+for r in answer["results"]:
+    replaced = r["artifact"].get("supersededAt")
+    note = f" (replaced {replaced[:10]})" if replaced else ""
+    print(f"{r['rank']}. [{r['artifact']['kind']}] {r['content']}{note}")
+```
+</CodeGroup>
 
-    As of March, Northwind is on Starter with 5 seats, and nothing is marked as
-    replaced yet. The upgrade and the ticket don't appear, because they hadn't
-    happened.
-  </Step>
-</Steps>
+Then run it:
 
-## Check that it worked
+<CodeGroup>
+```bash curl
+bash quickstart.sh
+```
 
-You're done when step 3 ranks the April upgrade above the January sign-up,
-and step 4 returns only January facts.
+```bash TypeScript
+node quickstart.ts
+```
 
-If step 3 comes back with an empty `results` array, at least one note is still
-processing. Go back to step 2.
+```bash Python
+python3 quickstart.py
+```
+</CodeGroup>
 
-## One thing to watch
+## Read the answer
 
-past.dev links an old value to a new one when both are the same property. In
-the run above it linked the two plan claims, but it filed the January seat
-count as `Starter plan seat count: 5 seats` and the April one as `Northwind
-Traders seats: 20 seats`. Those are different properties to past.dev, so the
-5-seat claim came back without `supersededAt`.
+Reading the notes took 20 to 60 seconds when I ran these scripts. Then you'll
+see something like this:
 
-So don't treat "no `supersededAt`" as "still true". Give your model the
-results in rank order, with their dates, and let it read the newest evidence
-first. Writing notes that name things the same way each time ("Northwind
-Traders seats") also helps.
+```text
+Sent 2 notes
+Processing...
+Processing...
+Processed
+1. [source] Email from Priya Shah at Northwind Traders: we have upgraded from the Starter plan to the Growth plan and now have 20 seats, effective today.
+2. [temporal-anchor] Priya Shah: Northwind Traders upgraded to the Growth plan and changed to 20 seats (when): today. Resolved to 2026-04-02.
+3. [source] Kickoff call with Northwind Traders. They signed up for the Starter plan with 5 seats. Main contact is Priya Shah, head of support.
+4. [claim] Priya Shah: Northwind Traders seats: 20 seats (exactly). Effective from 2026-04-02.
+5. [claim] Northwind Traders seats: 5 seats (exactly). Effective 2026-01-14 to 2026-04-02. (replaced 2026-04-02)
+```
 
-## Next step
+The April email ranks first. Line 5 is the January seat count, marked as
+replaced on April 2. Line 2 shows past.dev turned "effective today" into a real
+date, using the note's `timestamp`.
 
-<Card title="Scope memory per customer" icon="grid-round" href="/guides/scope-memory-per-customer">
-  These notes are readable by every identity in your project. The next guide
-  limits each customer's facts to that customer's users.
-</Card>
+Your wording and order will differ a little. past.dev uses a model to pull the
+facts out of each note, so each run phrases them its own way.
+
+If the script prints `past.dev error:`, the `code` in the message says what
+went wrong. The [troubleshooting table](/guides/scope-memory-per-customer#troubleshooting)
+covers each code. Running the script again is safe and free: unchanged notes
+come back as already processed.
+
+## Next steps
+
+You sent two dated facts and got back the current one, with the old one marked
+as replaced. From here:
+
+- **Ask about the past.** [Track facts that change](/tutorials/track-facts-that-change)
+  asks what was true in March, and shows how to write notes past.dev can link.
+- **Serve more than one customer.** [Scope memory per customer](/guides/scope-memory-per-customer)
+  keeps each customer's facts out of the others' answers.
+- **Learn the model.** [How past.dev decides what's true](/concepts/how-memory-works)
+  explains data points, memories, identities and audiences.
